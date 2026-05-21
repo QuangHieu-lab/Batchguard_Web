@@ -1,21 +1,26 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { 
-  LayoutDashboard, 
-  PackageCheck, 
-  Camera, 
-  AlertTriangle, 
-  LineChart, 
-  Users, 
+import { useEffect } from 'react';
+import {
+  LayoutDashboard,
+  PackageCheck,
+  Camera,
+  AlertTriangle,
+  LineChart,
+  Users,
   Settings,
   LogOut,
   Activity,
-  DollarSign
+  DollarSign,
+  Factory
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../contexts/AuthContext';
+import { FarmProvider } from '../../contexts/FarmContext';
+import { toast } from 'sonner';
 
 const adminMenuItems = [
   { path: '/admin', icon: LayoutDashboard, label: 'Tổng quan' },
+  { path: '/admin/farms', icon: Factory, label: 'Quản lý Trang trại' },
   { path: '/admin/batches', icon: PackageCheck, label: 'Quản lý mẻ bánh' },
   { path: '/admin/cameras', icon: Camera, label: 'Camera Monitoring' },
   { path: '/admin/risks', icon: AlertTriangle, label: 'Cảnh báo & Rủi ro' },
@@ -28,7 +33,23 @@ const adminMenuItems = [
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+
+  // Protect admin routes - only allow admin users
+  useEffect(() => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để truy cập');
+      navigate('/login', { replace: true });
+    } else if (user?.role !== 'admin') {
+      toast.error('Bạn không có quyền truy cập trang quản trị');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Don't render anything if not authenticated or not admin
+  if (!isAuthenticated || user?.role !== 'admin') {
+    return null;
+  }
 
   const handleLogout = () => {
     logout();
@@ -92,7 +113,9 @@ export default function AdminLayout() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-slate-950">
-        <Outlet />
+        <FarmProvider>
+          <Outlet />
+        </FarmProvider>
       </main>
     </div>
   );

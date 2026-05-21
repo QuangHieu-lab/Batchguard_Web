@@ -12,6 +12,7 @@ export interface Batch {
   humidity: number;
   weatherRisk: string;
   createdBy?: string;
+  farmId?: string; // Link to farm
 }
 
 export interface HistoricalData {

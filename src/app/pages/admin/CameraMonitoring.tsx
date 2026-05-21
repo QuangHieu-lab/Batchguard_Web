@@ -4,10 +4,19 @@ import { Button } from '../../components/ui/button';
 import { Camera, Wifi, WifiOff, Activity, RefreshCcw } from 'lucide-react';
 import { mockCameras } from '../../data/adminMockData';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
+import { FarmSelector } from '../../components/admin/FarmSelector';
+import { useFarm } from '../../contexts/FarmContext';
 
 export default function CameraMonitoring() {
-  const onlineCameras = mockCameras.filter(c => c.status === 'online').length;
-  const offlineCameras = mockCameras.filter(c => c.status === 'offline').length;
+  const { selectedFarmId } = useFarm();
+  
+  // Filter cameras by selected farm
+  const filteredCameras = selectedFarmId 
+    ? mockCameras.filter(c => c.farmId === selectedFarmId)
+    : mockCameras;
+
+  const onlineCameras = filteredCameras.filter(c => c.status === 'online').length;
+  const offlineCameras = filteredCameras.filter(c => c.status === 'offline').length;
 
   return (
     <div className="p-8 space-y-6">
@@ -17,10 +26,13 @@ export default function CameraMonitoring() {
           <h1 className="text-3xl font-bold text-white">Camera Monitoring</h1>
           <p className="text-slate-400 mt-1">Giám sát camera AI theo thời gian thực</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          <RefreshCcw className="w-4 h-4 mr-2" />
-          Làm mới
-        </Button>
+        <div className="flex gap-3">
+          <FarmSelector />
+          <Button className="bg-blue-600 hover:bg-blue-700">
+            <RefreshCcw className="w-4 h-4 mr-2" />
+            Làm mới
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -30,7 +42,7 @@ export default function CameraMonitoring() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-400">Tổng Camera</p>
-                <p className="text-3xl font-bold text-white mt-2">{mockCameras.length}</p>
+                <p className="text-3xl font-bold text-white mt-2">{filteredCameras.length}</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <Camera className="w-6 h-6 text-blue-400" />
@@ -70,7 +82,7 @@ export default function CameraMonitoring() {
 
       {/* Camera Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockCameras.map((camera) => (
+        {filteredCameras.map((camera) => (
           <Card key={camera.id} className="bg-slate-900 border-slate-800 overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

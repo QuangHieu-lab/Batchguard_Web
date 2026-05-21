@@ -24,16 +24,20 @@ import {
 } from 'lucide-react';
 import { allAdminBatches } from '../../data/adminMockData';
 import { Batch } from '../../data/mockData';
+import { FarmSelector } from '../../components/admin/FarmSelector';
+import { useFarm } from '../../contexts/FarmContext';
 
 export default function BatchManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'failed'>('all');
+  const { selectedFarmId } = useFarm();
 
   const filteredBatches = allAdminBatches.filter(batch => {
     const matchesSearch = batch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           batch.location?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || batch.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesFarm = !selectedFarmId || batch.farmId === selectedFarmId;
+    return matchesSearch && matchesStatus && matchesFarm;
   });
 
   const getStatusBadge = (status: Batch['status']) => {
@@ -58,9 +62,14 @@ export default function BatchManagement() {
     }
   };
 
-  const activeBatches = allAdminBatches.filter(b => b.status === 'active').length;
-  const completedBatches = allAdminBatches.filter(b => b.status === 'completed').length;
-  const failedBatches = allAdminBatches.filter(b => b.status === 'failed').length;
+  // Calculate metrics based on filtered batches
+  const batchesInScope = selectedFarmId 
+    ? allAdminBatches.filter(b => b.farmId === selectedFarmId)
+    : allAdminBatches;
+    
+  const activeBatches = batchesInScope.filter(b => b.status === 'active').length;
+  const completedBatches = batchesInScope.filter(b => b.status === 'completed').length;
+  const failedBatches = batchesInScope.filter(b => b.status === 'failed').length;
 
   return (
     <div className="p-8 space-y-6">
@@ -70,6 +79,7 @@ export default function BatchManagement() {
           <h1 className="text-3xl font-bold text-white">Quản lý mẻ bánh</h1>
           <p className="text-slate-400 mt-1">Theo dõi và quản lý tất cả mẻ bánh tráng</p>
         </div>
+        <FarmSelector />
       </div>
 
       {/* Summary Cards */}

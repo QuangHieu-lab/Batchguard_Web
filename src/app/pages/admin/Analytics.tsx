@@ -20,6 +20,8 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Activity, Clock } from 'lucide-react';
 import { mockDailyStats, allAdminBatches } from '../../data/adminMockData';
+import { FarmSelector } from '../../components/admin/FarmSelector';
+import { useFarm } from '../../contexts/FarmContext';
 
 const performanceData = [
   { month: 'T1', batches: 245, success: 220, failed: 25, avgTime: 290 },
@@ -36,16 +38,23 @@ const dryingProgressData = [
   { time: '16:00', batch1: 100, batch2: 88, batch3: 75 },
 ];
 
-const statusDistribution = [
-  { name: 'Hoàn thành', value: allAdminBatches.filter(b => b.status === 'completed').length, color: '#10b981' },
-  { name: 'Đang phơi', value: allAdminBatches.filter(b => b.status === 'active').length, color: '#3b82f6' },
-  { name: 'Thất bại', value: allAdminBatches.filter(b => b.status === 'failed').length, color: '#ef4444' },
-];
-
 export default function Analytics() {
-  const totalBatches = allAdminBatches.length;
-  const completedBatches = allAdminBatches.filter(b => b.status === 'completed').length;
-  const failedBatches = allAdminBatches.filter(b => b.status === 'failed').length;
+  const { selectedFarmId } = useFarm();
+
+  // Filter batches by selected farm
+  const filteredBatches = selectedFarmId
+    ? allAdminBatches.filter(b => b.farmId === selectedFarmId)
+    : allAdminBatches;
+
+  const statusDistribution = [
+    { name: 'Hoàn thành', value: filteredBatches.filter(b => b.status === 'completed').length, color: '#10b981' },
+    { name: 'Đang phơi', value: filteredBatches.filter(b => b.status === 'active').length, color: '#3b82f6' },
+    { name: 'Thất bại', value: filteredBatches.filter(b => b.status === 'failed').length, color: '#ef4444' },
+  ];
+
+  const totalBatches = filteredBatches.length;
+  const completedBatches = filteredBatches.filter(b => b.status === 'completed').length;
+  const failedBatches = filteredBatches.filter(b => b.status === 'failed').length;
   const successRate = ((completedBatches / (completedBatches + failedBatches)) * 100).toFixed(1);
   const avgDryingTime = 285; // minutes
 
@@ -57,6 +66,7 @@ export default function Analytics() {
           <h1 className="text-3xl font-bold text-white">Phân tích & Báo cáo</h1>
           <p className="text-slate-400 mt-1">Phân tích dữ liệu và hiệu suất hệ thống</p>
         </div>
+        <FarmSelector />
       </div>
 
       {/* Key Metrics */}
@@ -244,8 +254,8 @@ export default function Analytics() {
                     labelStyle={{ color: '#f1f5f9' }}
                   />
                   <Legend />
-                  <Bar dataKey="completed" fill="#10b981" name="Hoàn thành" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="failed" fill="#ef4444" name="Thất bại" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="completed" fill="#10b981" name="Hoàn thành" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="failed" fill="#ef4444" name="Thất bại" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

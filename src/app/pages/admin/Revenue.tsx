@@ -30,17 +30,42 @@ import {
   yearOverYearSummary
 } from '../../data/adminMockData';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart } from 'recharts';
+import { FarmSelector } from '../../components/admin/FarmSelector';
+import { useFarm } from '../../contexts/FarmContext';
 
 export default function Revenue() {
   const [period, setPeriod] = useState<'7days' | '30days'>('7days');
-  const metrics = mockRevenueMetrics;
+  const { selectedFarmId } = useFarm();
+  
+  // Filter batch revenue by selected farm
+  const filteredBatchRevenue = selectedFarmId
+    ? mockBatchRevenue.filter(b => b.farmId === selectedFarmId)
+    : mockBatchRevenue;
+
+  // Recalculate metrics based on filtered data
+  const filteredTotalRevenue = filteredBatchRevenue
+    .filter(b => b.status === 'sold')
+    .reduce((sum, b) => sum + b.totalRevenue, 0);
+  
+  const metrics = selectedFarmId
+    ? {
+        ...mockRevenueMetrics,
+        today: filteredTotalRevenue * 0.15,
+        week: filteredTotalRevenue * 0.35,
+        month: filteredTotalRevenue,
+        avgPerBatch: filteredBatchRevenue.length > 0 
+          ? filteredTotalRevenue / filteredBatchRevenue.filter(b => b.status === 'sold').length
+          : 0,
+      }
+    : mockRevenueMetrics;
   
   const revenueData = period === '7days' ? mockDailyRevenue : mockMonthlyRevenue;
   
-  // Find highest revenue batch and day
-  const highestBatch = mockBatchRevenue
-    .filter(b => b.status === 'sold')
-    .sort((a, b) => b.totalRevenue - a.totalRevenue)[0];
+  // Find highest revenue batch and day from filtered data
+  const soldBatches = filteredBatchRevenue.filter(b => b.status === 'sold');
+  const highestBatch = soldBatches.length > 0
+    ? soldBatches.sort((a, b) => b.totalRevenue - a.totalRevenue)[0]
+    : null;
   
   const highestDay = [...mockMonthlyRevenue]
     .sort((a, b) => b.revenue - a.revenue)[0];
@@ -92,6 +117,7 @@ export default function Revenue() {
           <h1 className="text-3xl font-bold text-white">Doanh thu</h1>
           <p className="text-slate-400 mt-1">Theo dõi hiệu quả kinh doanh và doanh thu</p>
         </div>
+        <FarmSelector />
       </div>
 
       {/* Revenue Summary */}
@@ -263,12 +289,16 @@ export default function Revenue() {
               </div>
               <div className="space-y-2">
                 <p className="text-2xl font-bold text-cyan-400">
-                  {formatCurrency(highestBatch.totalRevenue)}
+                  {highestBatch ? formatCurrency(highestBatch.totalRevenue) : '-'}
                 </p>
-                <p className="text-sm text-slate-300">{highestBatch.batchName}</p>
+                <p className="text-sm text-slate-300">
+                  {highestBatch ? highestBatch.batchName : '-'}
+                </p>
                 <div className="flex items-center gap-2">
-                  {getQualityBadge(highestBatch.qualityGrade)}
-                  <span className="text-xs text-slate-400">{highestBatch.quantity}kg</span>
+                  {highestBatch ? getQualityBadge(highestBatch.qualityGrade) : '-'}
+                  <span className="text-xs text-slate-400">
+                    {highestBatch ? `${highestBatch.quantity}kg` : '-'}
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -339,7 +369,7 @@ export default function Revenue() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockBatchRevenue.slice(0, 8).map((batch) => (
+                  {filteredBatchRevenue.slice(0, 8).map((batch) => (
                     <TableRow 
                       key={batch.id}
                       className="border-slate-800 hover:bg-slate-800/50"

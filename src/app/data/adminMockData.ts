@@ -1,5 +1,26 @@
 import { Batch } from './mockData';
 
+export interface Farm {
+  id: string;
+  name: string;
+  owner: string;
+  location: string;
+  address: string;
+  status: 'active' | 'inactive' | 'maintenance';
+  cameras: number;
+  camerasOnline: number;
+  activeBatches: number;
+  totalBatches: number;
+  completedBatches: number;
+  failedBatches: number;
+  successRate: number;
+  monthlyRevenue: number;
+  createdDate: string;
+  lastActivity: string;
+  operators: string[]; // user emails
+  imageUrl: string;
+}
+
 export interface Camera {
   id: string;
   name: string;
@@ -8,6 +29,7 @@ export interface Camera {
   lastUpdate: string;
   activeBatches: number;
   imageUrl: string;
+  farmId?: string; // Add farmId to link camera to farm
 }
 
 export interface User {
@@ -63,6 +85,130 @@ export interface AIConfig {
   confidenceThreshold: number; // %
 }
 
+export const mockFarms: Farm[] = [
+  {
+    id: 'farm-01',
+    name: 'Hộ A1',
+    owner: 'Nguyễn Văn A',
+    location: 'Hà Nội',
+    address: '123 Đường A1, Hà Nội',
+    status: 'active',
+    cameras: 3,
+    camerasOnline: 2,
+    activeBatches: 5,
+    totalBatches: 20,
+    completedBatches: 10,
+    failedBatches: 2,
+    successRate: 80,
+    monthlyRevenue: 15000000,
+    createdDate: '2025-01-15',
+    lastActivity: '2026-03-18T14:30:00',
+    operators: ['operator1@mylongai.com', 'operator2@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  },
+  {
+    id: 'farm-02',
+    name: 'Hộ B2',
+    owner: 'Trần Thị B',
+    location: 'Hà Nội',
+    address: '456 Đường B2, Hà Nội',
+    status: 'active',
+    cameras: 4,
+    camerasOnline: 3,
+    activeBatches: 6,
+    totalBatches: 25,
+    completedBatches: 12,
+    failedBatches: 3,
+    successRate: 76,
+    monthlyRevenue: 16000000,
+    createdDate: '2025-02-20',
+    lastActivity: '2026-03-18T14:29:55',
+    operators: ['operator1@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  },
+  {
+    id: 'farm-03',
+    name: 'Hộ C3',
+    owner: 'Lê Văn C',
+    location: 'Hà Nội',
+    address: '789 Đường C3, Hà Nội',
+    status: 'active',
+    cameras: 2,
+    camerasOnline: 2,
+    activeBatches: 4,
+    totalBatches: 15,
+    completedBatches: 8,
+    failedBatches: 1,
+    successRate: 85,
+    monthlyRevenue: 14000000,
+    createdDate: '2025-03-10',
+    lastActivity: '2026-03-18T14:30:02',
+    operators: ['operator2@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  },
+  {
+    id: 'farm-04',
+    name: 'Hộ A2',
+    owner: 'Phạm Thị D',
+    location: 'Hà Nội',
+    address: '101 Đường A2, Hà Nội',
+    status: 'active',
+    cameras: 3,
+    camerasOnline: 3,
+    activeBatches: 3,
+    totalBatches: 18,
+    completedBatches: 9,
+    failedBatches: 0,
+    successRate: 100,
+    monthlyRevenue: 17000000,
+    createdDate: '2025-04-25',
+    lastActivity: '2026-03-18T14:29:50',
+    operators: ['operator1@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  },
+  {
+    id: 'farm-05',
+    name: 'Hộ B1',
+    owner: 'Nguyễn Văn E',
+    location: 'Hà Nội',
+    address: '202 Đường B1, Hà Nội',
+    
+    status: 'inactive',
+    cameras: 2,
+    camerasOnline: 0,
+    activeBatches: 0,
+    totalBatches: 10,
+    completedBatches: 5,
+    failedBatches: 2,
+    successRate: 50,
+    monthlyRevenue: 10000000,
+    createdDate: '2025-05-30',
+    lastActivity: '2026-03-18T13:15:00',
+    operators: ['operator2@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  },
+  {
+    id: 'farm-06',
+    name: 'Hộ D1',
+    owner: 'Trần Thị F',
+    location: 'Hà Nội',
+    address: '303 Đường D1, Hà Nội',
+    status: 'active',
+    cameras: 5,
+    camerasOnline: 5,
+    activeBatches: 7,
+    totalBatches: 30,
+    completedBatches: 15,
+    failedBatches: 5,
+    successRate: 60,
+    monthlyRevenue: 18000000,
+    createdDate: '2025-06-15',
+    lastActivity: '2026-03-18T14:30:01',
+    operators: ['operator1@mylongai.com', 'operator2@mylongai.com'],
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+  }
+];
+
 export const mockCameras: Camera[] = [
   {
     id: 'cam-01',
@@ -71,7 +217,8 @@ export const mockCameras: Camera[] = [
     status: 'online',
     lastUpdate: '2026-03-18T14:30:00',
     activeBatches: 2,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-01'
   },
   {
     id: 'cam-02',
@@ -80,7 +227,8 @@ export const mockCameras: Camera[] = [
     status: 'online',
     lastUpdate: '2026-03-18T14:29:55',
     activeBatches: 1,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-02'
   },
   {
     id: 'cam-03',
@@ -89,7 +237,8 @@ export const mockCameras: Camera[] = [
     status: 'online',
     lastUpdate: '2026-03-18T14:30:02',
     activeBatches: 1,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-03'
   },
   {
     id: 'cam-04',
@@ -98,7 +247,8 @@ export const mockCameras: Camera[] = [
     status: 'online',
     lastUpdate: '2026-03-18T14:29:50',
     activeBatches: 0,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-04'
   },
   {
     id: 'cam-05',
@@ -107,7 +257,8 @@ export const mockCameras: Camera[] = [
     status: 'offline',
     lastUpdate: '2026-03-18T13:15:00',
     activeBatches: 0,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-05'
   },
   {
     id: 'cam-06',
@@ -116,7 +267,8 @@ export const mockCameras: Camera[] = [
     status: 'online',
     lastUpdate: '2026-03-18T14:30:01',
     activeBatches: 1,
-    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400'
+    imageUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=400',
+    farmId: 'farm-06'
   }
 ];
 
@@ -311,7 +463,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 32,
     humidity: 45,
     weatherRisk: 'Ổn định trong 4 giờ tới',
-    createdBy: 'operator1@mylongai.com'
+    createdBy: 'operator1@mylongai.com',
+    farmId: 'farm-01'
   },
   {
     id: '2',
@@ -326,7 +479,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 31,
     humidity: 52,
     weatherRisk: 'Độ ẩm có thể tăng trong 2 giờ tới',
-    createdBy: 'operator2@mylongai.com'
+    createdBy: 'operator2@mylongai.com',
+    farmId: 'farm-02'
   },
   {
     id: '3',
@@ -341,7 +495,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 30,
     humidity: 65,
     weatherRisk: 'Nguy cơ mưa cao trong 1-2 giờ tới',
-    createdBy: 'user@example.com'
+    createdBy: 'user@example.com',
+    farmId: 'farm-03'
   },
   {
     id: '4',
@@ -355,7 +510,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 33,
     humidity: 48,
     weatherRisk: 'Ổn định',
-    createdBy: 'operator1@mylongai.com'
+    createdBy: 'operator1@mylongai.com',
+    farmId: 'farm-06'
   },
   {
     id: '5',
@@ -369,7 +525,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 34,
     humidity: 42,
     weatherRisk: 'Tốt',
-    createdBy: 'operator2@mylongai.com'
+    createdBy: 'operator2@mylongai.com',
+    farmId: 'farm-04'
   },
   {
     id: '6',
@@ -383,7 +540,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 33,
     humidity: 40,
     weatherRisk: 'Hoàn thành',
-    createdBy: 'operator1@mylongai.com'
+    createdBy: 'operator1@mylongai.com',
+    farmId: 'farm-01'
   },
   {
     id: '7',
@@ -397,7 +555,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 32,
     humidity: 42,
     weatherRisk: 'Hoàn thành',
-    createdBy: 'user@example.com'
+    createdBy: 'user@example.com',
+    farmId: 'farm-02'
   },
   {
     id: '8',
@@ -412,7 +571,8 @@ export const allAdminBatches: Batch[] = [
     temperature: 28,
     humidity: 85,
     weatherRisk: 'Hỏng do mưa bất ngờ',
-    createdBy: 'operator2@mylongai.com'
+    createdBy: 'operator2@mylongai.com',
+    farmId: 'farm-03'
   }
 ];
 
@@ -440,6 +600,7 @@ export interface BatchRevenue {
   totalRevenue: number; // VND
   completedDate: string;
   soldDate?: string;
+  farmId?: string; // Add farmId to link to farm
 }
 
 export interface DailyRevenue {
@@ -472,7 +633,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 85000,
     totalRevenue: 3825000,
     completedDate: '2026-03-18T14:30:00',
-    soldDate: '2026-03-18T15:00:00'
+    soldDate: '2026-03-18T15:00:00',
+    farmId: 'farm-01'
   },
   {
     id: '6',
@@ -483,7 +645,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 85000,
     totalRevenue: 4250000,
     completedDate: '2026-03-18T12:00:00',
-    soldDate: '2026-03-18T13:00:00'
+    soldDate: '2026-03-18T13:00:00',
+    farmId: 'farm-01'
   },
   {
     id: '7',
@@ -494,7 +657,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 75000,
     totalRevenue: 3600000,
     completedDate: '2026-03-17T14:30:00',
-    soldDate: '2026-03-17T16:00:00'
+    soldDate: '2026-03-17T16:00:00',
+    farmId: 'farm-02'
   },
   {
     id: '8',
@@ -504,7 +668,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     quantity: 0,
     pricePerKg: 0,
     totalRevenue: 0,
-    completedDate: '2026-03-17T11:30:00'
+    completedDate: '2026-03-17T11:30:00',
+    farmId: 'farm-03'
   },
   {
     id: '9',
@@ -515,7 +680,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 85000,
     totalRevenue: 4420000,
     completedDate: '2026-03-16T13:00:00',
-    soldDate: '2026-03-16T14:30:00'
+    soldDate: '2026-03-16T14:30:00',
+    farmId: 'farm-02'
   },
   {
     id: '10',
@@ -526,7 +692,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 75000,
     totalRevenue: 3450000,
     completedDate: '2026-03-16T15:00:00',
-    soldDate: '2026-03-16T16:00:00'
+    soldDate: '2026-03-16T16:00:00',
+    farmId: 'farm-03'
   },
   {
     id: '11',
@@ -537,7 +704,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 85000,
     totalRevenue: 4165000,
     completedDate: '2026-03-15T12:30:00',
-    soldDate: '2026-03-15T14:00:00'
+    soldDate: '2026-03-15T14:00:00',
+    farmId: 'farm-04'
   },
   {
     id: '12',
@@ -548,7 +716,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 60000,
     totalRevenue: 2640000,
     completedDate: '2026-03-15T16:00:00',
-    soldDate: '2026-03-15T17:00:00'
+    soldDate: '2026-03-15T17:00:00',
+    farmId: 'farm-06'
   },
   {
     id: '13',
@@ -559,7 +728,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 85000,
     totalRevenue: 4335000,
     completedDate: '2026-03-14T13:00:00',
-    soldDate: '2026-03-14T15:00:00'
+    soldDate: '2026-03-14T15:00:00',
+    farmId: 'farm-01'
   },
   {
     id: '14',
@@ -570,7 +740,8 @@ export const mockBatchRevenue: BatchRevenue[] = [
     pricePerKg: 75000,
     totalRevenue: 3525000,
     completedDate: '2026-03-14T14:30:00',
-    soldDate: '2026-03-14T16:00:00'
+    soldDate: '2026-03-14T16:00:00',
+    farmId: 'farm-02'
   }
 ];
 
