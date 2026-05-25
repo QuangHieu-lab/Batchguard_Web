@@ -61,7 +61,17 @@ function generateHistoricalBatches(): Batch[] {
   const now = new Date();
   
   // Create batches for the last 7 days
-  const batchData = [
+  const batchData: Array<{
+    day: number;
+    time: string;
+    duration: number;
+    risk: 'low' | 'medium' | 'high';
+    outcome: 'success' | 'early_collection' | 'warning_completed';
+    location: string;
+    temp: number;
+    hum: number;
+    notes?: string;
+  }> = [
     { day: 0, time: '06:30', duration: 260, risk: 'low', outcome: 'success', location: 'Khu vực A', temp: 32, hum: 42 },
     { day: 0, time: '08:15', duration: 310, risk: 'medium', outcome: 'success', location: 'Khu vực B', temp: 31, hum: 48, notes: 'Độ ẩm tăng nhẹ buổi chiều' },
     { day: 1, time: '07:00', duration: 245, risk: 'low', outcome: 'success', location: 'Khu vực C', temp: 33, hum: 40 },
@@ -164,10 +174,10 @@ export function SystemProvider({ children }: { children: ReactNode }) {
         else if (newDryness > 70 && timeRemaining > 60) newRisk = 'medium';
         else if (newDryness < 50) newRisk = 'low';
 
-        const newStatus = newDryness >= 100 ? 'completed' : 
+        const newStatus: Batch['status'] = newDryness >= 100 ? 'completed' : 
                          newRisk === 'high' ? 'warning' : 'active';
 
-        const updated = {
+        const updated: Batch = {
           ...prev,
           dryness: newDryness,
           timeRemaining: Math.max(0, timeRemaining),
@@ -180,12 +190,14 @@ export function SystemProvider({ children }: { children: ReactNode }) {
         // If completed, move to history
         if (newDryness >= 100) {
           window.setTimeout(() => {
-            setBatchHistory(history => [{
+            const completedBatch: Batch = {
               ...updated,
+              status: 'completed',
               completionDuration: Math.floor((updated.estimatedCompletion.getTime() - updated.startTime.getTime()) / 60000),
               outcome: updated.risk === 'high' ? 'early_collection' : 
                        updated.risk === 'medium' ? 'warning_completed' : 'success',
-            }, ...history]);
+            };
+            setBatchHistory(history => [completedBatch, ...history]);
             setActiveBatch(null);
           }, 1000);
         }

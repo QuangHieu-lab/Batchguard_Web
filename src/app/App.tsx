@@ -11,6 +11,7 @@ import Weather from './pages/Weather';
 import VoiceAlerts from './pages/VoiceAlerts';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminOverview from './pages/admin/AdminOverview';
+import FarmManagement from './pages/admin/FarmManagement';
 import BatchManagement from './pages/admin/BatchManagement';
 import AdminCameraMonitoring from './pages/admin/CameraMonitoring';
 import RiskManagement from './pages/admin/RiskManagement';
@@ -18,6 +19,7 @@ import Revenue from './pages/admin/Revenue';
 import Analytics from './pages/admin/Analytics';
 import UserManagement from './pages/admin/UserManagement';
 import Settings from './pages/admin/Settings';
+
 
 const router = createBrowserRouter([
   {
@@ -37,7 +39,7 @@ const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Overview />,
+            element: <CameraMonitoring />,
           },
           {
             path: 'batch/:id',
@@ -68,6 +70,10 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <AdminOverview />,
+          },
+          {
+ path: 'farms',
+            element: <FarmManagement />,
           },
           {
             path: 'batches',

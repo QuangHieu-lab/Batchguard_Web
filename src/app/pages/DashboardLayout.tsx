@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Home, History, Settings, Sparkles, LogOut, User, Camera, Cloud, Volume2 } from 'lucide-react';
+import { BarChart3, History, Settings, Sparkles, LogOut, User, Camera, Cloud, Volume2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { SystemStatus } from '../components/SystemStatus';
 import { WelcomeNotification } from '../components/WelcomeNotification';
@@ -13,8 +13,7 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { path: '/dashboard', icon: Home, label: 'Tổng quan', exact: true },
-    { path: '/dashboard/camera', icon: Camera, label: 'Camera trực tiếp' },
+    { path: '/dashboard/camera', icon: Camera, label: 'Camera quan sát', exact: true },
     { path: '/dashboard/weather', icon: Cloud, label: 'Thời tiết' },
     { path: '/dashboard/voice', icon: Volume2, label: 'Thông báo bằng giọng nói' },
     { path: '/dashboard/history', icon: History, label: 'Lịch sử' },
