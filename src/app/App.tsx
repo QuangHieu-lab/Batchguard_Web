@@ -3,7 +3,6 @@ import { RootLayout } from './components/RootLayout';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import ProtectedDashboard from './components/ProtectedDashboard';
-import Overview from './pages/Overview';
 import BatchDetail from './pages/BatchDetail';
 import History from './pages/History';
 import CameraMonitoring from './pages/CameraMonitoring';
