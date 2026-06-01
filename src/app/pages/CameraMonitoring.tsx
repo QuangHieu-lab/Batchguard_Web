@@ -17,7 +17,8 @@ interface LogEntry {
 
 export default function CameraMonitoring() {
   const { activeBatch } = useSystem();
-  const { currentWeather } = useWeather();
+  // 🚀 Lấy thêm trạng thái loading từ useWeather để xử lý mượt mà
+  const { currentWeather, loading: weatherLoading } = useWeather();
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: "13:00",
@@ -69,33 +70,36 @@ export default function CameraMonitoring() {
     return () => clearInterval(logInterval);
   }, [activeBatch]);
 
-  // Risk assessment based on real weather data
+  // 🚀 Cập nhật AI Risk Assessment dựa trên dữ liệu thật của Backend
   const getRiskLevel = () => {
-    if (!activeBatch) return null;
+    // Thêm check an toàn: Nếu chưa có batch hoặc thời tiết đang load thì trả về null
+    if (!activeBatch || !currentWeather) return null; 
+    
     const now = new Date();
     const hour = now.getHours();
     const nextHour = `${hour.toString().padStart(2, '0')}:00 - ${(hour + 2).toString().padStart(2, '0')}:00`;
 
-    if (currentWeather.rainChance > 60) {
+    // 🚀 Tận dụng trường isRaining (đang mưa) và maxPrecip12h của Backend mới
+    if (currentWeather.isRaining || currentWeather.rainChance > 60) {
       return {
         level: "high" as const,
-        message: "Cảnh báo mưa",
+        message: currentWeather.isRaining ? "Trời đang mưa!" : "Cảnh báo mưa cao",
         timeRange: nextHour,
-        description: `Khả năng mưa ${currentWeather.rainChance}% - Chuẩn bị thu bánh`,
+        description: `Khả năng mưa ${currentWeather.rainChance}% (Đỉnh điểm: ${currentWeather.maxPrecip12h}%) - Yêu cầu thu bánh ngay!`,
       };
     } else if (currentWeather.rainChance > 30 || currentWeather.humidity > 70) {
       return {
         level: "medium" as const,
-        message: "Độ ẩm cao",
+        message: "Môi trường rủi ro",
         timeRange: nextHour,
-        description: `Độ ẩm ${currentWeather.humidity}%, mưa ${currentWeather.rainChance}% - Giám sát chặt`,
+        description: `Độ ẩm ${currentWeather.humidity}%, mưa ${currentWeather.rainChance}% - Giám sát chặt chẽ`,
       };
     }
     return {
       level: "low" as const,
       message: "Điều kiện tốt",
       timeRange: nextHour,
-      description: `Nhiệt độ ${currentWeather.temperature.toFixed(1)}°C, độ ẩm ${currentWeather.humidity}% - Thuận lợi`,
+      description: `Nhiệt độ ${currentWeather.temperature.toFixed(1)}°C, độ ẩm ${currentWeather.humidity}% - Phơi thuận lợi`,
     };
   };
 
@@ -132,8 +136,10 @@ export default function CameraMonitoring() {
 
         {/* Metrics & Risk Panel */}
         <div className="space-y-6">
-          <MetricsPanel activeBatch={activeBatch} currentWeather={currentWeather} />
-          <RiskAlertPanel riskInfo={riskInfo} />
+          {/* 🚀 Truyền fallback an toàn nếu weather đang load */}
+          {/* Provide a safe fallback object so MetricsPanel always receives the expected shape */}
+          <MetricsPanel activeBatch={activeBatch} currentWeather={currentWeather ?? { temperature: 0, humidity: 0 }} />
+          {riskInfo && <RiskAlertPanel riskInfo={riskInfo} />}
         </div>
       </div>
 
