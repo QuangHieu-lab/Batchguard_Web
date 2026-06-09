@@ -1,13 +1,16 @@
+import { useNavigate } from 'react-router';; // 🚀 Thêm Hook điều hướng
 import { useWeather } from '../hooks/useWeather';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { VoiceNotification } from '../components/VoiceNotification';
 import { 
   Cloud, CloudRain, Droplets, Thermometer, Wind,
-  Sun, CloudDrizzle, AlertTriangle, Lightbulb, Cpu, CheckCircle2, Gauge
+  Sun, CloudDrizzle, AlertTriangle, Lightbulb, Cpu, CheckCircle2, Gauge,
+  ChevronRight // 🚀 Import thêm icon mũi tên
 } from 'lucide-react';
 
 export default function Weather() {
+  const navigate = useNavigate(); // 🚀 Khởi tạo hàm điều hướng
   const { currentWeather, advice, sensorData, loading, error } = useWeather();
 
   const getWeatherIcon = (icon: string | undefined, size: string = 'w-8 h-8') => {
@@ -50,9 +53,8 @@ export default function Weather() {
         </div>
       </div>
 
-      {/* 4 THẺ THỜI TIẾT (Đã cập nhật thêm chỉ số phụ) */}
+      {/* 4 THẺ THỜI TIẾT */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-        
         {/* Nhiệt độ */}
         <Card className="border border-[#3A2E2A] bg-gradient-to-br from-[#2A2421] to-[#1F1A18] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
           <CardContent className="p-5">
@@ -130,16 +132,23 @@ export default function Weather() {
         </Card>
       </div>
 
-      {/* BANNER HIỆN TRẠNG */}
-      <Card className="border-none shadow-[0_8px_30px_rgba(0,0,0,0.5)] bg-gradient-to-r from-[#D8DAE0] via-[#F1F3F5] to-[#B3B6BD]">
+      {/* ========================================================================= */}
+      {/* 🚀 BANNER HIỆN TRẠNG (Đã được nâng cấp thành Nút Click Điều Hướng) */}
+      {/* ========================================================================= */}
+      <Card 
+        onClick={() => navigate('/dashboard/weather-alert')} 
+        className="border-none shadow-[0_8px_30px_rgba(0,0,0,0.5)] bg-gradient-to-r from-[#D8DAE0] via-[#F1F3F5] to-[#B3B6BD] cursor-pointer hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)] hover:-translate-y-1 transition-all duration-300 group"
+      >
         <CardContent className="p-4 md:p-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            
+            {/* Box Icon và Tiêu đề */}
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl flex items-center justify-center shadow-lg">
+              <div className="w-16 h-16 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-300">
                 {getWeatherIcon(currentWeather.icon, 'w-10 h-10 text-white')}
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-1 drop-shadow-sm">
+                <h3 className="text-2xl font-bold text-slate-900 mb-1 drop-shadow-sm group-hover:text-cyan-700 transition-colors">
                   {currentWeather.isRaining ? 'Trời đang mưa' : currentWeather.condition}
                 </h3>
                 <p className="text-sm font-medium text-slate-700">
@@ -148,16 +157,24 @@ export default function Weather() {
               </div>
             </div>
             
-            {/* Phân loại Badge rủi ro */}
-            {currentWeather.isRaining || currentWeather.rainChance > 50 ? (
-              <Badge className="bg-red-500 hover:bg-red-600 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> Cảnh báo: Rủi ro mưa cao
-              </Badge>
-            ) : (
-               <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" /> An toàn
-              </Badge>
-            )}
+            {/* Box Nút Cảnh báo và Mũi tên */}
+            <div className="flex items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
+              {currentWeather.isRaining || currentWeather.rainChance > 50 ? (
+                <Badge className="bg-red-500 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" /> Cảnh báo: Rủi ro mưa cao
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-500 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> An toàn
+                </Badge>
+              )}
+              
+              {/* 🚀 Mũi tên chuyển trang (Chỉ hiển thị rõ khi rê chuột) */}
+              <div className="bg-black/10 group-hover:bg-cyan-500 p-2 rounded-full transition-colors duration-300 ml-1">
+                <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-white transition-transform duration-300 group-hover:translate-x-1" />
+              </div>
+            </div>
+
           </div>
         </CardContent>
       </Card>
