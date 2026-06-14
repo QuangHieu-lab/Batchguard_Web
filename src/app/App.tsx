@@ -18,7 +18,10 @@ import Revenue from './pages/admin/Revenue';
 import Analytics from './pages/admin/Analytics';
 import UserManagement from './pages/admin/UserManagement';
 import Settings from './pages/admin/Settings';
-
+import WeatherAlert from './pages/WeatherAlert';
+// 🚀 THÊM IMPORT CHO 2 TRANG MỚI TẠO TẠI ĐÂY
+import AiPerformance from './pages/admin/AiPerformance';
+import DryingCycles from './pages/admin/DryingCycles';
 
 const router = createBrowserRouter([
   {
@@ -52,6 +55,10 @@ const router = createBrowserRouter([
             path: 'weather',
             element: <Weather />,
           },
+           {
+            path: 'weather-alert',
+            element: <WeatherAlert />,
+          },
           {
             path: 'voice',
             element: <VoiceAlerts />,
@@ -71,7 +78,7 @@ const router = createBrowserRouter([
             element: <AdminOverview />,
           },
           {
- path: 'farms',
+            path: 'farms',
             element: <FarmManagement />,
           },
           {
@@ -101,6 +108,15 @@ const router = createBrowserRouter([
           {
             path: 'settings',
             element: <Settings />,
+          },
+          // 🚀 THÊM PATH CHO 2 TRANG MỚI TẠI ĐÂY
+          {
+            path: 'ai-performance',
+            element: <AiPerformance />,
+          },
+          {
+            path: 'drying-cycles',
+            element: <DryingCycles />,
           },
         ],
       },

@@ -5,6 +5,65 @@ import { Upload, Scan, Tag, Crosshair, AlertTriangle } from 'lucide-react';
 
 interface YoloUploadDemoProps {}
 
+// ==========================================
+// 1. TỪ ĐIỂN NHÃN (CLASS MAPPING)
+// ==========================================
+const CLASS_NAMES: Record<number, string> = {
+  0: "Bánh tráng mè đen",
+  1: "Bánh tráng sữa",
+  2: "Bánh tráng rách (Lỗi)",
+};
+
+// ==========================================
+// 2. HÀM NÉN ẢNH TRƯỚC KHI UPLOAD (CHỐNG TRÀN RAM SERVER)
+// ==========================================
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 640; // Đưa về chuẩn đầu vào lý tưởng của YOLO
+        const MAX_HEIGHT = 640;
+        let width = img.width;
+        let height = img.height;
+
+        // Tính toán tỷ lệ giữ nguyên khung hình
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Nén ảnh sang định dạng JPEG với chất lượng 80%
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // Thay đổi đuôi file thành .jpg để đồng nhất định dạng
+            const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
+            resolve(new File([blob], newFileName, { type: 'image/jpeg' }));
+          } else {
+            resolve(file); // Nếu lỗi canvas, trả về ảnh gốc để không bị kẹt
+          }
+        }, 'image/jpeg', 0.8);
+      };
+    };
+  });
+};
+
 export function YoloUploadDemo({}: YoloUploadDemoProps) {
   const yoloFileInputRef = useRef<HTMLInputElement>(null);
   const [yoloPreviewUrl, setYoloPreviewUrl] = useState<string | null>(null);
@@ -16,43 +75,72 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
     imageUrl?: string;
   } | null>(null);
 
+  // ==========================================
+  // 3. XỬ LÝ UPLOAD VÀ GỌI API
+  // ==========================================
   const handleYoloUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setYoloPreviewUrl(URL.createObjectURL(file));
+    const originalFile = e.target.files?.[0];
+    if (!originalFile) return;
+
+    // Bật loading sớm để báo cho user biết hệ thống đang xử lý (Bao gồm thời gian nén ảnh)
+    setYoloLoading(true);
     setYoloError(null);
     setYoloResult(null);
-    setYoloLoading(true);
+    
     try {
+      // 🚀 Thực hiện nén ảnh trước khi đẩy lên Server
+      const compressedFile = await compressImage(originalFile);
+      
+      // Hiển thị Preview bằng ảnh đã được nén
+      setYoloPreviewUrl(URL.createObjectURL(compressedFile));
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
+      
+      // Lấy URL từ biến môi trường
+      const API_BASE_URL = (import.meta as any).VITE_API_URL || 'https://mylongai-backend-v2.onrender.com';
       let response: Response | null = null;
+      
+      // Vòng lặp Retry thông minh chống Render ngủ gật
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) {
           setYoloError(`Server đang khởi động... thử lại (${attempt}/2)`);
           await new Promise(r => setTimeout(r, 4000));
         }
-        response = await fetch('https://mylongai-backend-v2.onrender.com/ai/detect', { method: 'POST', body: formData });
+        response = await fetch(`${API_BASE_URL}/ai/detect`, { 
+          method: 'POST', 
+          body: formData 
+        });
+        
         const ct = response.headers.get('content-type') ?? '';
         if (ct.includes('application/json')) break;
         response = null;
       }
+      
       if (!response) throw new Error('Server chưa sẵn sàng, vui lòng thử lại sau 30 giây');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`HTTP Lỗi ${response.status}: Server bị quá tải hoặc từ chối kết nối`);
+      
       setYoloError(null);
       const data = await response.json();
       const raw = data.objects ?? data.detections ?? data.predictions ?? data.results ?? [];
+      
       const detections = raw.map((d: any) => ({
-        label: d.label ?? ({ 0: 'Bánh tráng mè trắng', 1: 'Bánh tráng mè đen' }[d.class as 0 | 1] ?? `Class ${d.class}`),
+        label: d.label ?? (CLASS_NAMES[d.class] ?? `Nhãn lạ (ID: ${d.class})`),
         confidence: d.confidence,
         bbox: d.bbox ?? [],
       }));
+      
       const imageUrl: string | undefined = data.image ? `data:image/jpeg;base64,${data.image}` : data.image_url ?? undefined;
       setYoloResult({ count: detections.length, detections, imageUrl });
+      
     } catch (err: any) {
       setYoloError(err.message ?? 'Lỗi kết nối YOLO API');
     } finally {
       setYoloLoading(false);
+      // Reset input để có thể upload lại cùng một file nếu muốn
+      if (yoloFileInputRef.current) {
+        yoloFileInputRef.current.value = '';
+      }
     }
   };
 

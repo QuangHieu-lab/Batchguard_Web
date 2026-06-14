@@ -3,6 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Camera, Scan, Tag, Crosshair, AlertTriangle } from 'lucide-react';
 
+// 🚀 1. Đồng bộ Từ điển giống hệt App Mobile & YoloUploadDemo
+const CLASS_NAMES: Record<number, string> = {
+  0: "Bánh tráng mè đen",
+  1: "Bánh tráng sữa",
+  2: "Bánh tráng rách (Lỗi)",
+};
+
 export function RealtimeCameraYolo() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,22 +53,30 @@ export function RealtimeCameraYolo() {
     snap.getContext("2d")?.drawImage(video, 0, 0);
     const base64 = snap.toDataURL("image/jpeg", 0.8).split(",")[1];
     setIsScanning(true);
+    
     try {
-      const res = await fetch("/yolo-api/ai/detect-realtime", {
+      // 🚀 2. Sử dụng Biến môi trường thay vì Proxy/Hardcode
+      const API_BASE_URL = (import.meta as any).VITE_API_URL || 'https://mylongai-backend-v2.onrender.com';
+      
+      const res = await fetch(`${API_BASE_URL}/ai/detect-realtime`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64 }),
       });
+      
       if (!res.ok) return;
       const ct = res.headers.get('content-type') ?? '';
       if (!ct.includes('application/json')) return;
+      
       const data = await res.json();
       const raw: any[] = data.objects ?? [];
       const dets = raw.map((d) => ({
-        label: d.label ?? ({ 0: "Bánh tráng mè trắng", 1: "Bánh tráng mè đen" }[d.class as 0 | 1] ?? `Class ${d.class}`),
+        // 🚀 3. Sử dụng từ điển CLASS_NAMES chuẩn để dịch tên nhãn
+        label: d.label ?? (CLASS_NAMES[d.class] ?? `Nhãn lạ (ID: ${d.class})`),
         confidence: d.confidence,
         bbox: d.bbox ?? [],
       }));
+      
       setRealtimeDetections(dets.length > 0 ? dets : prev => prev);
       if (dets.length > 0) drawDetections(dets);
     } catch { /* silent */ }

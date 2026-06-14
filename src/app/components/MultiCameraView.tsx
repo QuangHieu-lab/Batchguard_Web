@@ -1,42 +1,32 @@
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Camera, Eye } from 'lucide-react';
+import { Camera, Eye, Trash2 } from 'lucide-react'; // 🚀 Thêm icon Trash2 để xóa
 import { useSystem } from '../contexts/SystemContext';
 
-interface CameraData {
+// Khai báo kiểu dữ liệu Camera
+export interface CameraData {
   id: string;
   name: string;
   zone: string;
   status: 'active' | 'offline';
   hasDetection: boolean;
+  streamUrl?: string;
 }
 
-export function MultiCameraView() {
-  const { activeBatch, isDetecting } = useSystem();
+// 🚀 Nhận dữ liệu từ ngoài truyền vào
+interface MultiCameraViewProps {
+  cameras: CameraData[];
+  selectedCamera: string;
+  onSelectCamera: (id: string) => void;
+  onDeleteCamera: (id: string) => void;
+}
 
-  const [cameras, setCameras] = useState<CameraData[]>([
-    { id: 'CAM-01', name: 'Camera Khu A', zone: 'Khu vực A - Sân phơi chính', status: 'active', hasDetection: true },
-    { id: 'CAM-02', name: 'Camera Khu B', zone: 'Khu vực B - Sân phơi phụ', status: 'active', hasDetection: false },
-    { id: 'CAM-03', name: 'Camera Khu C', zone: 'Khu vực C - Khu dự phòng', status: 'active', hasDetection: false },
-    { id: 'CAM-04', name: 'Camera Khu D', zone: 'Khu vực D - Khu thử nghiệm', status: 'active', hasDetection: false },
-  ]);
-
-  const [selectedCamera, setSelectedCamera] = useState<string>('CAM-01');
-
-  // Simulate random detection on different cameras
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCameras(prev => prev.map((cam, idx) => ({
-        ...cam,
-        hasDetection: idx === 0 ? Boolean(activeBatch) : Math.random() > 0.7,
-      })));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeBatch]);
+export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: MultiCameraViewProps) {
+  const { isDetecting } = useSystem();
 
   const selectedCam = cameras.find(c => c.id === selectedCamera) || cameras[0];
+
+  if (!selectedCam) return null; // An toàn nếu xóa hết camera
 
   return (
     <div className="space-y-6">
@@ -45,13 +35,25 @@ export function MultiCameraView() {
         {cameras.map((camera) => (
           <Card
             key={camera.id}
-            onClick={() => setSelectedCamera(camera.id)}
-            className={`cursor-pointer transition-all duration-300 ${
+            onClick={() => onSelectCamera(camera.id)}
+            className={`cursor-pointer transition-all duration-300 relative group ${
               selectedCamera === camera.id
                 ? 'border-cyan-500 bg-cyan-500/5 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
                 : 'border-slate-800 bg-[#151E2F] hover:border-slate-700'
             }`}
           >
+            {/* 🚀 Nút xóa hiển thị khi hover */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation(); // Tránh bị click nhầm vào Card
+                onDeleteCamera(camera.id);
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-20"
+              title="Ngắt kết nối"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -67,7 +69,7 @@ export function MultiCameraView() {
                   </div>
                 </div>
                 {camera.status === 'active' && (
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse mr-6 group-hover:hidden" />
                 )}
               </div>
             </CardHeader>
@@ -109,8 +111,8 @@ export function MultiCameraView() {
 
               {/* Camera Info */}
               <div className="space-y-1">
-                <p className="text-xs font-medium text-white">{camera.name}</p>
-                <p className="text-[10px] text-slate-500">{camera.zone}</p>
+                <p className="text-xs font-medium text-white truncate" title={camera.name}>{camera.name}</p>
+                <p className="text-[10px] text-slate-500 truncate" title={camera.zone}>{camera.zone}</p>
               </div>
 
               {/* Status Badge */}
@@ -189,7 +191,7 @@ export function MultiCameraView() {
                       <div className="text-center space-y-3">
                         <Eye className="w-16 h-16 text-slate-700 mx-auto" />
                         <p className="text-slate-500 font-mono text-sm">Đang chờ phát hiện...</p>
-                        {isDetecting && selectedCamera === 'CAM-01' && (
+                        {isDetecting && selectedCam.id === 'CAM-01' && (
                           <div className="flex items-center gap-2 justify-center">
                             <div className="w-2 h-2 bg-cyan-400 rounded-full animate-ping" />
                             <span className="text-cyan-400 text-xs">Scanning...</span>
@@ -211,6 +213,12 @@ export function MultiCameraView() {
                 <div className="absolute top-4 left-4 bg-[#0B1121]/80 backdrop-blur-md px-3 py-2 rounded-lg z-20 font-mono text-xs text-slate-300 space-y-1 border border-slate-800">
                   <div>{selectedCam.id} | {selectedCam.zone.split(' - ')[0]}</div>
                   <div className="text-cyan-400">{new Date().toLocaleTimeString('vi-VN')}</div>
+                  {/* 🚀 Thể hiện URL stream ảo */}
+                  {selectedCam.streamUrl && (
+                    <div className="text-[10px] text-slate-500 mt-1 truncate max-w-[200px]">
+                      {selectedCam.streamUrl}
+                    </div>
+                  )}
                 </div>
 
                 {/* Recording indicator */}

@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import apiClient from '../../services/api';
 
+// ==========================================
+// 1. CÁC TYPE INTERFACE (Đã bổ sung full trường BE)
+// ==========================================
 export interface WeatherData {
   id: string;
   time: string;
@@ -18,92 +22,69 @@ export interface CurrentWeather {
   windSpeed: number;
   condition: string;
   icon: string;
+  pressure: number;
+  maxPrecip12h: number;
+  isRaining: boolean;
 }
 
-// Bến Tre coordinates
-const LAT = 10.2433;
-const LON = 106.3756;
+const DEFAULT_LAT = 10.2264;
+const DEFAULT_LON = 106.4214;
 
-function getRisk(rainChance: number, humidity: number): 'low' | 'medium' | 'high' {
-  if (rainChance > 60) return 'high';
-  if (rainChance > 30 || humidity > 70) return 'medium';
-  return 'low';
-}
-
-function getCondition(rainChance: number, cloudCover: number): { condition: string; icon: string } {
-  if (rainChance > 60) return { condition: 'Có mưa', icon: 'cloudrain' };
-  if (rainChance > 30) return { condition: 'Có mây, khả năng mưa', icon: 'cloud' };
-  if (cloudCover > 50) return { condition: 'Nhiều mây', icon: 'cloud' };
-  return { condition: 'Nắng ráo', icon: 'sun' };
-}
-
-export function useWeather() {
-  const [currentWeather, setCurrentWeather] = useState<CurrentWeather>({
-    temperature: 32,
-    humidity: 55,
-    rainChance: 15,
-    windSpeed: 12,
-    condition: 'Nắng ráo',
-    icon: 'sun',
-  });
+export function useWeather(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON) {
+  const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(null);
   const [forecastData, setForecastData] = useState<WeatherData[]>([]);
+  const [advice, setAdvice] = useState<string[]>([]);
+  const [sensorData, setSensorData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchWeather() {
       try {
-        const url =
-          `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
-          `&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,cloud_cover` +
-          `&current=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,cloud_cover` +
-          `&timezone=Asia%2FBangkok&forecast_days=1`;
+        setLoading(true);
+        
+        // 1. Gọi API
+        const response = await apiClient.get(`/weather/analyze?lat=${lat}&lon=${lon}&save=true`);
 
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Không thể tải dữ liệu thời tiết');
-        const data = await res.json();
+        // 2. 🚀 Bọc an toàn: Xử lý trường hợp Axios trả về cục response to hoặc trả thẳng data
+        const data = response?.data || response;
 
-        const cur = data.current;
-        const { condition, icon } = getCondition(
-          cur.precipitation_probability ?? 0,
-          cur.cloud_cover ?? 0
-        );
-        setCurrentWeather({
-          temperature: cur.temperature_2m,
-          humidity: cur.relative_humidity_2m,
-          rainChance: cur.precipitation_probability ?? 0,
-          windSpeed: cur.wind_speed_10m,
-          condition,
-          icon,
-        });
-
-        const now = new Date();
-        const times: string[] = data.hourly.time;
-        const temps: number[] = data.hourly.temperature_2m;
-        const humids: number[] = data.hourly.relative_humidity_2m;
-        const rains: number[] = data.hourly.precipitation_probability;
-        const winds: number[] = data.hourly.wind_speed_10m;
-
-        const forecast: WeatherData[] = [];
-        for (let i = 0; i < times.length && forecast.length < 12; i++) {
-          if (new Date(times[i]) < now) continue;
-          const hour = new Date(times[i]).getHours();
-          forecast.push({
-            id: `hour-${i}`,
-            time: `${hour.toString().padStart(2, '0')}:00`,
-            hour,
-            temperature: Math.round(temps[i] * 10) / 10,
-            humidity: Math.round(humids[i]),
-            rainChance: Math.round(rains[i]),
-            windSpeed: Math.round(winds[i] * 10) / 10,
-            risk: getRisk(rains[i], humids[i]),
-          });
+        // Chặn lỗi nếu server không trả về gì
+        if (!data) {
+          throw new Error("Không nhận được dữ liệu từ máy chủ");
         }
 
-        setForecastData(forecast);
+        // 3. 🚀 Sử dụng Dấu chấm hỏi an toàn (?.) cho mọi property để không bao giờ bị Crash
+        let icon = 'sun';
+        if (data?.prediction?.currently_raining || data?.prediction?.rain_level === 'high') {
+          icon = 'cloudrain';
+        } else if (data?.prediction?.rain_level === 'medium') {
+          icon = 'cloud';
+        }
+
+        // Map dữ liệu vào State
+        setCurrentWeather({
+          temperature: data?.api_weather?.temperature_c || 0,
+          humidity: data?.api_weather?.humidity_percent || 0,
+          windSpeed: data?.api_weather?.wind_speed_ms || 0,
+          pressure: data?.api_weather?.pressure_hpa || 0,
+          
+          rainChance: data?.prediction?.rain_score || 0,
+          maxPrecip12h: data?.prediction?.max_precip_probability_12h || 0,
+          isRaining: data?.prediction?.currently_raining || false,
+          
+          condition: data?.prediction?.rain_label || 'Đang cập nhật',
+          icon: icon,
+        });
+
+        setAdvice(data?.advice || []);
+        setSensorData(data?.sensor_data || null);
+        setForecastData([]); 
         setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Lỗi không xác định');
+
+      } catch (err: any) {
+        console.error("🔥 Lỗi chi tiết fetchWeather:", err);
+        setError(err.response?.data?.message || err.message || 'Lỗi kết nối tới Server');
       } finally {
         setLoading(false);
       }
@@ -112,7 +93,7 @@ export function useWeather() {
     fetchWeather();
     const interval = setInterval(fetchWeather, 10 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [lat, lon]);
 
-  return { currentWeather, forecastData, loading, error };
+  return { currentWeather, forecastData, advice, sensorData, loading, error };
 }
