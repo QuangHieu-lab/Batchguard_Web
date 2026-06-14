@@ -142,7 +142,7 @@ export default function CameraMonitoring() {
           <MonitoringLog logs={logs} />
         </div>
         <div className="space-y-6">
-          <MetricsPanel activeBatch={activeBatch} currentWeather={currentWeather ?? { temperature: 0, humidity: 0 }} />
+          <MetricsPanel activeBatch={activeBatch} />
           {/* ... */}
         </div>
       </div>
