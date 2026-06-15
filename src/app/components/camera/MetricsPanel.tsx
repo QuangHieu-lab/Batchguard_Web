@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Thermometer, Droplets, TrendingUp, Clock, Activity, Loader2, CloudRain } from 'lucide-react';
+import { Thermometer, Droplets, TrendingUp, Clock, Activity, CloudRain } from 'lucide-react';
 import type { Batch } from '../../contexts/SystemContext';
 
-// =========================================================================
-// 🚀 LẤY ĐƯỜNG LINK TỪ BIẾN MÔI TRƯỜNG (.env)
-// =========================================================================
+// CẤU HÌNH API
 const WEATHER_API_URL = (import.meta as any).VITE_WEATHER_BASE_URL || 'https://mylongaiv2.onrender.com';
-const DRYING_API_URL = (import.meta as any).VITE_API_URL || 'https://mylongai-backend-v2.onrender.com';
-
-// Thời gian phơi tiêu chuẩn để AI làm mốc tính % độ khô (VD: 12 tiếng = 720 phút)
-const STANDARD_DRYING_MINUTES = 720; 
 
 interface MetricsPanelProps {
   activeBatch: Batch | null;
@@ -18,23 +12,42 @@ interface MetricsPanelProps {
 
 export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
   const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
-  const [predictedMinutes, setPredictedMinutes] = useState<number>(0);
-  const [estimatedCompletion, setEstimatedCompletion] = useState<Date | null>(null);
-  const [isFetching, setIsFetching] = useState<boolean>(false);
   const [isUsingMockData, setIsUsingMockData] = useState<boolean>(false);
-
-  // TỰ ĐỘNG TÍNH TOÁN % ĐỘ KHÔ DỰA VÀO SỐ PHÚT AI TRẢ VỀ THẬT
-  const calculatedDryness = Math.round(
-    Math.max(0, Math.min(100, 100 - (predictedMinutes / STANDARD_DRYING_MINUTES) * 100))
+  
+  // 🚀 Ghim mốc thời gian bắt đầu phơi. 
+  // (Nếu activeBatch không có startTime, tạm giả lập mẻ bánh đã phơi được 3 tiếng để thấy được thanh Progress)
+  const [batchStartTime] = useState<Date>(
+    (activeBatch as any)?.startTime ? new Date((activeBatch as any).startTime) : new Date(Date.now() - 3 * 60 * 60 * 1000)
   );
+
+  // =========================================================================
+  // 🧠 CÔNG THỨC DỰ ĐOÁN THỜI GIAN KHÔ (Dựa vào Nhiệt độ, Độ ẩm)
+  // =========================================================================
+  // Mốc chuẩn: 12 tiếng (720 phút) ở 35°C, 60% ẩm
+  const baseTime = 720; 
+  const tempFactor = 35 / Math.max(weatherData.temp, 10); // Nóng hơn -> Khô nhanh hơn (< 1)
+  const humFactor = Math.max(weatherData.hum, 10) / 60;   // Ẩm cao hơn -> Khô chậm hơn (> 1)
+  
+  // Tổng số phút cần thiết để khô hoàn toàn
+  const totalPredictedMinutes = Math.round(baseTime * tempFactor * humFactor);
+  
+  // Số phút đã trôi qua kể từ lúc bắt đầu phơi
+  const elapsedMinutes = Math.floor((Date.now() - batchStartTime.getTime()) / 60000);
+  
+  // % Độ khô hiện tại
+  const calculatedDryness = Math.min(100, Math.max(0, Math.round((elapsedMinutes / totalPredictedMinutes) * 100)));
+  
+  // Thời gian dự kiến hoàn thành (Cố định, ít bị nhảy lùi)
+  const estimatedCompletion = new Date(batchStartTime.getTime() + totalPredictedMinutes * 60000);
+  
+  // Số phút đếm ngược còn lại
+  const minutesLeft = Math.max(0, totalPredictedMinutes - elapsedMinutes);
 
   useEffect(() => {
     if (!activeBatch) return;
-
     let isMounted = true;
 
     const fetchRealtimeData = async () => {
-      setIsFetching(true);
       setIsUsingMockData(false); 
 
       try {
@@ -43,7 +56,7 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
         let rainLabel = '';
         let isRaining = false;
 
-        // 1. LẤY THÔNG SỐ THỜI TIẾT
+        // 1. LẤY THÔNG SỐ THỜI TIẾT TỪ CẢM BIẾN/API
         try {
           const weatherRes = await fetch(`${WEATHER_API_URL}/weather/analyze`, {
             method: 'GET',
@@ -67,53 +80,24 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
           setWeatherData({ temp: currentTemp, hum: currentHum, rainLabel, isRaining });
         }
 
-        // 2. GỌI API DỰ ĐOÁN TỪ AI VỚI DỮ LIỆU THỜI TIẾT Ở TRÊN
-        const predictRes = await fetch(`${DRYING_API_URL}/drying/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            avg_temperature: currentTemp,
-            avg_humidity: currentHum
-          })
-        });
-
-        if (predictRes.ok) {
-          const predictJson = await predictRes.json();
-          // Lấy DỮ LIỆU THẬT từ Backend trả về
-          const minutesLeft = Math.round(predictJson.predicted_drying_time || 0);
-          
-          // Tính toán chính xác thời điểm hoàn thành theo giờ thực tế
-          const completionTime = new Date();
-          completionTime.setMinutes(completionTime.getMinutes() + minutesLeft);
-
-          if (isMounted) {
-            setPredictedMinutes(minutesLeft);
-            setEstimatedCompletion(completionTime);
-          }
-        }
       } catch (error) {
-        console.error("Lỗi đồng bộ AI:", error);
-      } finally {
-        if (isMounted) setIsFetching(false);
+        console.error("Lỗi đồng bộ dữ liệu:", error);
       }
     };
 
     fetchRealtimeData();
-    
-    // Tự động quét 5 phút/lần
-    const interval = setInterval(fetchRealtimeData, 300000); 
-
+    const interval = setInterval(fetchRealtimeData, 300000); // 5 phút cập nhật thời tiết 1 lần
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [!!activeBatch]); // <-- Dùng !! để không bị spam request
+  }, [!!activeBatch]); 
 
   return (
     <Card className="border-slate-800 bg-[#151E2F] shadow-md">
-      <CardHeader className="border-b border-slate-800 bg-[#151E2F] flex-row justify-between items-center">
+      <CardHeader className="border-b border-slate-800 bg-[#151E2F] flex-row justify-between items-center py-4">
         <CardTitle className="text-base md:text-lg text-white">
-          Chỉ số hiện tại
+          Chỉ số môi trường
         </CardTitle>
         {isUsingMockData && (
           <span className="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-1 rounded border border-orange-500/30">
@@ -121,12 +105,13 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
           </span>
         )}
       </CardHeader>
-      <CardContent className="p-4 md:p-5 space-y-4 pt-5">
+      
+      <CardContent className="p-4 md:p-5 space-y-5 pt-5">
         {activeBatch ? (
           <>
             {/* Cảnh báo mưa */}
             {weatherData.rainLabel && (
-              <div className={`p-3 rounded-lg border flex-row items-center gap-2 ${
+              <div className={`p-3 rounded-xl border flex-row items-center gap-2 ${
                 weatherData.isRaining || weatherData.rainLabel.includes('cao')
                   ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' 
                   : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
@@ -136,41 +121,22 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
               </div>
             )}
 
-            {/* Nhiệt độ */}
-            <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center">
-                    <Thermometer className="w-5 h-5 text-orange-400" />
-                  </div>
-                  <span className="text-sm font-medium text-slate-400">
-                    Nhiệt độ (Sensor)
-                  </span>
-                </div>
+            {/* LƯỚI 2 CHỈ SỐ: NHIỆT ĐỘ - ĐỘ ẨM */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
+                <Thermometer className="w-6 h-6 text-orange-400 mb-2" />
+                <span className="text-2xl font-bold text-white">{weatherData.temp.toFixed(1)}°C</span>
+                <span className="text-xs text-slate-500 font-medium mt-1">Nhiệt độ</span>
               </div>
-              <div className="text-3xl font-bold text-white">
-                {weatherData.temp.toFixed(1)}°C
+              
+              <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
+                <Droplets className="w-6 h-6 text-cyan-400 mb-2" />
+                <span className="text-2xl font-bold text-white">{weatherData.hum.toFixed(1)}%</span>
+                <span className="text-xs text-slate-500 font-medium mt-1">Độ ẩm</span>
               </div>
             </div>
 
-            {/* Độ ẩm */}
-            <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center">
-                    <Droplets className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <span className="text-sm font-medium text-slate-400">
-                    Độ ẩm (Sensor)
-                  </span>
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white">
-                {weatherData.hum.toFixed(1)}%
-              </div>
-            </div>
-
-            {/* KHỐI HIỂN THỊ DỮ LIỆU DỰ ĐOÁN TỪ AI */}
+            {/* KHỐI HIỂN THỊ DỮ LIỆU DỰ ĐOÁN */}
             <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-violet-500 to-transparent opacity-50" />
               <div className="flex items-center justify-between mb-2">
@@ -179,38 +145,30 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
                     <Clock className="w-5 h-5 text-violet-400" />
                   </div>
                   <span className="text-sm font-medium text-slate-400">
-                    Dự kiến khô (AI Predict)
+                    Dự kiến khô (Dựa theo Môi trường)
                   </span>
                 </div>
               </div>
               <div className="space-y-1">
-                {/* 1. Mấy giờ sẽ khô (Chữ to in đậm) */}
                 <div className="text-2xl font-bold text-white flex items-center gap-2">
-                  {estimatedCompletion 
-                    ? estimatedCompletion.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) 
-                    : '--:--'
-                  }
-                  {isFetching && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+                  {estimatedCompletion.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                 </div>
-                {/* 2. Đếm ngược còn bao nhiêu tiếng (Chữ nhỏ màu tím) */}
                 <div className="text-xs text-violet-400 font-medium">
-                  {predictedMinutes > 0 
-                    ? `Đếm ngược: ${Math.floor(predictedMinutes / 60)}h ${predictedMinutes % 60}p` 
-                    : 'Đang tính toán...'}
+                  {minutesLeft > 0 
+                    ? `Đếm ngược: ${Math.floor(minutesLeft / 60)}h ${minutesLeft % 60}p` 
+                    : 'Đã hoàn thành!'}
                 </div>
               </div>
             </div>
 
-            {/* Tiến trình Độ khô tự tính toán từ AI */}
+            {/* Tiến trình Độ khô */}
             <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
                     <TrendingUp className="w-5 h-5 text-emerald-400" />
                   </div>
-                  <span className="text-sm font-medium text-slate-400">
-                    Độ khô (Ước tính)
-                  </span>
+                  <span className="text-sm font-medium text-slate-400">Độ khô (Ước tính)</span>
                 </div>
                 <span className="text-2xl font-bold text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]">
                   {calculatedDryness}%
@@ -224,24 +182,19 @@ export function MetricsPanel({ activeBatch }: MetricsPanelProps) {
               </div>
               <div className="mt-2 text-xs text-slate-400 font-medium">
                 {calculatedDryness < 50
-                  ? "Giai đoạn đầu"
+                  ? "Giai đoạn đầu (Đang ráo mặt)"
                   : calculatedDryness < 80
                     ? "Đang khô nhanh"
                     : calculatedDryness < 100 
-                      ? "Sắp hoàn thành" 
-                      : "🎉 Đã khô hoàn toàn!"}
+                      ? "Sắp hoàn thành (Chuẩn bị thu hoạch)" 
+                      : "🎉 Bánh đã khô hoàn toàn!"}
               </div>
             </div>
           </>
         ) : (
           <div className="text-center py-12">
             <Activity className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-            <p className="text-sm text-slate-500">
-              Chưa có mẻ bánh đang phơi
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              Hệ thống cảm biến đang chờ...
-            </p>
+            <p className="text-sm text-slate-500">Chưa có mẻ bánh đang phơi</p>
           </div>
         )}
       </CardContent>

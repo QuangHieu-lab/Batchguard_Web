@@ -16,7 +16,6 @@ export default function DashboardLayout() {
     { path: '/dashboard/camera', icon: Camera, label: 'Camera quan sát', exact: true },
     { path: '/dashboard/weather', icon: Cloud, label: 'Thời tiết' },
     { path: '/dashboard/voice', icon: Volume2, label: 'Thông báo bằng giọng nói' },
-    { path: '/dashboard/history', icon: History, label: 'Lịch sử' },
   ];
 
   const isActive = (path: string, exact?: boolean) => {

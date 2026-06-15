@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -15,61 +14,81 @@ import {
   TrendingUp, 
   TrendingDown,
   DollarSign,
-  ShoppingCart,
-  Award,
+  Users,
   Calendar,
-  ArrowUpRight
+  Crown,
+  CheckCircle2,
+  CreditCard
 } from 'lucide-react';
 import { 
-  mockRevenueMetrics, 
-  mockDailyRevenue,
-  mockMonthlyRevenue,
-  mockBatchRevenue,
-  BatchRevenue,
-  mockYearOverYearRevenue,
-  yearOverYearSummary
-} from '../../data/adminMockData';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart } from 'recharts';
-import { FarmSelector } from '../../components/admin/FarmSelector';
-import { useFarm } from '../../contexts/FarmContext';
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, Legend, Bar, ComposedChart 
+} from 'recharts';
+
+// =========================================================================
+// 🚀 DỮ LIỆU MOCK ĐỘC QUYỀN CHO GÓI PREMIUM 6 THÁNG (Đồng bộ với Mobile)
+// =========================================================================
+const PREMIUM_PRICE = 1200000;
+
+const mockPremiumMetrics = {
+  today: PREMIUM_PRICE * 3,     
+  week: PREMIUM_PRICE * 25,     
+  month: PREMIUM_PRICE * 115,   
+  totalSubscribers: 342,
+  growth: { today: 12.5, week: 5.2, month: 18.4 }
+};
+
+const mockPremiumTransactions = [
+  { id: 'tx1', user: 'Nguyễn Văn A', email: 'a.nguyen@farm.com', amount: PREMIUM_PRICE, date: '14/06/2026 09:30', status: 'success' },
+  { id: 'tx2', user: 'Trần Thị B', email: 'b.tran@agri.com', amount: PREMIUM_PRICE, date: '14/06/2026 08:15', status: 'success' },
+  { id: 'tx3', user: 'Lê Văn C', email: 'c.le@vietfarm.vn', amount: PREMIUM_PRICE, date: '13/06/2026 16:45', status: 'success' },
+  { id: 'tx4', user: 'Phạm Thị D', email: 'd.pham@fresh.com', amount: PREMIUM_PRICE, date: '13/06/2026 10:20', status: 'success' },
+  { id: 'tx5', user: 'Hoàng Văn E', email: 'e.hoang@eco.vn', amount: PREMIUM_PRICE, date: '12/06/2026 14:00', status: 'success' },
+  { id: 'tx6', user: 'Lý Thị F', email: 'f.ly@gmail.com', amount: PREMIUM_PRICE, date: '12/06/2026 09:15', status: 'success' },
+  { id: 'tx7', user: 'Vũ Văn G', email: 'g.vu@nongnghiep.vn', amount: PREMIUM_PRICE, date: '11/06/2026 15:30', status: 'success' },
+];
+
+const mockDailyRevenue = [
+  { date: '2026-06-08', revenue: PREMIUM_PRICE * 2 },
+  { date: '2026-06-09', revenue: PREMIUM_PRICE * 3 },
+  { date: '2026-06-10', revenue: PREMIUM_PRICE * 1 },
+  { date: '2026-06-11', revenue: PREMIUM_PRICE * 5 },
+  { date: '2026-06-12', revenue: PREMIUM_PRICE * 4 },
+  { date: '2026-06-13', revenue: PREMIUM_PRICE * 8 },
+  { date: '2026-06-14', revenue: PREMIUM_PRICE * 3 },
+];
+
+const mockMonthlyRevenue = [
+  { date: '2026-01-01', revenue: PREMIUM_PRICE * 45 },
+  { date: '2026-02-01', revenue: PREMIUM_PRICE * 52 },
+  { date: '2026-03-01', revenue: PREMIUM_PRICE * 68 },
+  { date: '2026-04-01', revenue: PREMIUM_PRICE * 85 },
+  { date: '2026-05-01', revenue: PREMIUM_PRICE * 95 },
+  { date: '2026-06-01', revenue: PREMIUM_PRICE * 115 },
+];
+
+const mockYearOverYearRevenue = [
+  { month: 'Jan', monthNumber: 1, currentYear: PREMIUM_PRICE * 45, previousYear: PREMIUM_PRICE * 20, subs2026: 45, subs2025: 20, growth: 125.0 },
+  { month: 'Feb', monthNumber: 2, currentYear: PREMIUM_PRICE * 52, previousYear: PREMIUM_PRICE * 25, subs2026: 52, subs2025: 25, growth: 108.0 },
+  { month: 'Mar', monthNumber: 3, currentYear: PREMIUM_PRICE * 68, previousYear: PREMIUM_PRICE * 30, subs2026: 68, subs2025: 30, growth: 126.7 },
+  { month: 'Apr', monthNumber: 4, currentYear: PREMIUM_PRICE * 85, previousYear: PREMIUM_PRICE * 40, subs2026: 85, subs2025: 40, growth: 112.5 },
+  { month: 'May', monthNumber: 5, currentYear: PREMIUM_PRICE * 95, previousYear: PREMIUM_PRICE * 55, subs2026: 95, subs2025: 55, growth: 72.7 },
+  { month: 'Jun', monthNumber: 6, currentYear: PREMIUM_PRICE * 115, previousYear: PREMIUM_PRICE * 60, subs2026: 115, subs2025: 60, growth: 91.7 },
+];
+
+const yearOverYearSummary = {
+  totalRevenue2026: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.currentYear, 0),
+  ytdRevenue2025: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.previousYear, 0),
+  totalSubs2026: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.subs2026, 0),
+  ytdSubs2025: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.subs2025, 0),
+  get ytdGrowth() { return ((this.totalRevenue2026 / this.ytdRevenue2025) - 1) * 100 }
+};
 
 export default function Revenue() {
   const [period, setPeriod] = useState<'7days' | '30days'>('7days');
-  const { selectedFarmId } = useFarm();
-  
-  // Filter batch revenue by selected farm
-  const filteredBatchRevenue = selectedFarmId
-    ? mockBatchRevenue.filter(b => b.farmId === selectedFarmId)
-    : mockBatchRevenue;
-
-  // Recalculate metrics based on filtered data
-  const filteredTotalRevenue = filteredBatchRevenue
-    .filter(b => b.status === 'sold')
-    .reduce((sum, b) => sum + b.totalRevenue, 0);
-  
-  const metrics = selectedFarmId
-    ? {
-        ...mockRevenueMetrics,
-        today: filteredTotalRevenue * 0.15,
-        week: filteredTotalRevenue * 0.35,
-        month: filteredTotalRevenue,
-        avgPerBatch: filteredBatchRevenue.length > 0 
-          ? filteredTotalRevenue / filteredBatchRevenue.filter(b => b.status === 'sold').length
-          : 0,
-      }
-    : mockRevenueMetrics;
-  
   const revenueData = period === '7days' ? mockDailyRevenue : mockMonthlyRevenue;
-  
-  // Find highest revenue batch and day from filtered data
-  const soldBatches = filteredBatchRevenue.filter(b => b.status === 'sold');
-  const highestBatch = soldBatches.length > 0
-    ? soldBatches.sort((a, b) => b.totalRevenue - a.totalRevenue)[0]
-    : null;
-  
-  const highestDay = [...mockMonthlyRevenue]
-    .sort((a, b) => b.revenue - a.revenue)[0];
 
+  // Format Helpers
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('vi-VN', { 
       style: 'currency', 
@@ -79,34 +98,8 @@ export default function Revenue() {
   };
 
   const formatShortCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
-    }
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
     return `${(value / 1000).toFixed(0)}K`;
-  };
-
-  const getQualityBadge = (grade: BatchRevenue['qualityGrade']) => {
-    switch (grade) {
-      case 'A':
-        return <Badge className="bg-green-500/10 text-green-400 border-green-500/20">Loại A</Badge>;
-      case 'B':
-        return <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20">Loại B</Badge>;
-      case 'C':
-        return <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20">Loại C</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-500/10 text-red-400 border-red-500/20">Thất bại</Badge>;
-    }
-  };
-
-  const getStatusBadge = (status: BatchRevenue['status']) => {
-    switch (status) {
-      case 'sold':
-        return <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">Đã bán</Badge>;
-      case 'in_stock':
-        return <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20">Trong kho</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-500/10 text-red-400 border-red-500/20">Hỏng</Badge>;
-    }
   };
 
   return (
@@ -114,13 +107,12 @@ export default function Revenue() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Doanh thu</h1>
-          <p className="text-slate-400 mt-1">Theo dõi hiệu quả kinh doanh và doanh thu</p>
+          <h1 className="text-3xl font-bold text-white">Doanh thu Premium</h1>
+          <p className="text-amber-400 font-medium mt-1">Quản lý giao dịch và tăng trưởng Subscriptions (Gói 6 tháng)</p>
         </div>
-        <FarmSelector />
       </div>
 
-      {/* Revenue Summary */}
+      {/* Revenue Summary (4 Cards) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-6">
@@ -128,16 +120,16 @@ export default function Revenue() {
               <div>
                 <p className="text-sm text-slate-400">Doanh thu hôm nay</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(metrics.today)}
+                  {formatShortCurrency(mockPremiumMetrics.today)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">+{metrics.growth.today.toFixed(1)}%</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.today}%</span>
                   <span className="text-slate-500">vs hôm qua</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-cyan-400" />
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                <DollarSign className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
@@ -147,18 +139,18 @@ export default function Revenue() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Doanh thu tuần</p>
+                <p className="text-sm text-slate-400">Doanh thu tuần này</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(metrics.week)}
+                  {formatShortCurrency(mockPremiumMetrics.week)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">+{metrics.growth.week.toFixed(1)}%</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.week}%</span>
                   <span className="text-slate-500">vs tuần trước</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6 text-blue-400" />
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                <Calendar className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
@@ -168,18 +160,18 @@ export default function Revenue() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Doanh thu tháng</p>
+                <p className="text-sm text-slate-400">Doanh thu tháng này</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(metrics.month)}
+                  {formatShortCurrency(mockPremiumMetrics.month)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">+{metrics.growth.month.toFixed(1)}%</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.month}%</span>
                   <span className="text-slate-500">vs tháng trước</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-green-400" />
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                <TrendingUp className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
@@ -189,43 +181,41 @@ export default function Revenue() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Giá trị TB/Mẻ</p>
+                <p className="text-sm text-slate-400">Tổng KH Premium</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(metrics.avgPerBatch)}
+                  {mockPremiumMetrics.totalSubscribers}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <Award className="w-4 h-4 text-purple-400" />
-                  <span className="text-purple-400">{metrics.conversionRate}%</span>
-                  <span className="text-slate-500">chuyển đổi</span>
+                  <span className="text-amber-400 font-medium">Người dùng đang Active</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Award className="w-6 h-6 text-purple-400" />
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                <Users className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue Chart */}
+      {/* Main Revenue Chart */}
       <Card className="bg-slate-900 border-slate-800">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white">Biểu đồ doanh thu</CardTitle>
-            <div className="flex gap-2">
+            <CardTitle className="text-white">Tăng trưởng doanh thu</CardTitle>
+            <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
               <Button
-                variant={period === '7days' ? 'default' : 'outline'}
+                variant={period === '7days' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setPeriod('7days')}
-                className={period === '7days' ? 'bg-blue-600' : 'bg-slate-800 border-slate-700 text-slate-300'}
+                className={period === '7days' ? 'bg-amber-500 text-slate-900 hover:bg-amber-400' : 'text-slate-400 hover:text-white'}
               >
                 7 ngày
               </Button>
               <Button
-                variant={period === '30days' ? 'default' : 'outline'}
+                variant={period === '30days' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setPeriod('30days')}
-                className={period === '30days' ? 'bg-blue-600' : 'bg-slate-800 border-slate-700 text-slate-300'}
+                className={period === '30days' ? 'bg-amber-500 text-slate-900 hover:bg-amber-400' : 'text-slate-400 hover:text-white'}
               >
                 30 ngày
               </Button>
@@ -237,17 +227,19 @@ export default function Revenue() {
             <LineChart data={revenueData}>
               <defs>
                 <linearGradient id="revenueChartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} key="stop1"/>
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} key="stop2"/>
+                  <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3} key="stop1"/>
+                  <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} key="stop2"/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
               <XAxis 
                 dataKey="date" 
                 stroke="#94a3b8"
                 tickFormatter={(value) => {
                   const date = new Date(value);
-                  return `${date.getDate()}/${date.getMonth() + 1}`;
+                  return period === '7days' 
+                    ? `${date.getDate()}/${date.getMonth() + 1}`
+                    : `Tháng ${date.getMonth() + 1}`;
                 }}
               />
               <YAxis 
@@ -264,10 +256,10 @@ export default function Revenue() {
               <Line 
                 type="monotone" 
                 dataKey="revenue" 
-                stroke="#06b6d4" 
-                strokeWidth={3}
-                dot={{ fill: '#06b6d4', r: 4 }}
-                activeDot={{ r: 6 }}
+                stroke="#fbbf24" 
+                strokeWidth={4}
+                dot={{ fill: '#fbbf24', strokeWidth: 2, r: 4, stroke: '#1e293b' }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
                 name="Doanh thu"
               />
             </LineChart>
@@ -275,188 +267,99 @@ export default function Revenue() {
         </CardContent>
       </Card>
 
-      {/* Highlights & Batch Revenue */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Highlights */}
-        <div className="space-y-4">
-          <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                  <Award className="w-5 h-5 text-cyan-400" />
-                </div>
-                <h3 className="text-white font-semibold">Mẻ bánh cao nhất</h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-2xl font-bold text-cyan-400">
-                  {highestBatch ? formatCurrency(highestBatch.totalRevenue) : '-'}
-                </p>
-                <p className="text-sm text-slate-300">
-                  {highestBatch ? highestBatch.batchName : '-'}
-                </p>
-                <div className="flex items-center gap-2">
-                  {highestBatch ? getQualityBadge(highestBatch.qualityGrade) : '-'}
-                  <span className="text-xs text-slate-400">
-                    {highestBatch ? `${highestBatch.quantity}kg` : '-'}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-green-400" />
-                </div>
-                <h3 className="text-white font-semibold">Ngày cao nhất</h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-2xl font-bold text-green-400">
-                  {formatCurrency(highestDay.revenue)}
-                </p>
-                <p className="text-sm text-slate-300">
-                  {new Date(highestDay.date).toLocaleDateString('vi-VN', { 
-                    day: '2-digit', 
-                    month: 'long', 
-                    year: 'numeric' 
-                  })}
-                </p>
-                <p className="text-xs text-slate-400">{highestDay.batches} mẻ bánh đã bán</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                  <ArrowUpRight className="w-5 h-5 text-purple-400" />
-                </div>
-                <h3 className="text-white font-semibold">Tỷ lệ chuyển đổi</h3>
-              </div>
-              <div className="space-y-3">
-                <p className="text-3xl font-bold text-purple-400">{metrics.conversionRate}%</p>
-                <p className="text-sm text-slate-400">Batch đạt chuẩn → Bán thành công</p>
-                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
-                    style={{ width: `${metrics.conversionRate}%` }}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Batch Revenue Table */}
-        <Card className="lg:col-span-2 bg-slate-900 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-white">Doanh thu theo mẻ bánh</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-800 hover:bg-slate-800/50">
-                    <TableHead className="text-slate-400">Mã mẻ</TableHead>
-                    <TableHead className="text-slate-400">Chất lượng</TableHead>
-                    <TableHead className="text-slate-400">Trạng thái</TableHead>
-                    <TableHead className="text-slate-400">Số lượng</TableHead>
-                    <TableHead className="text-slate-400">Giá/kg</TableHead>
-                    <TableHead className="text-slate-400 text-right">Doanh thu</TableHead>
+      {/* Transactions Table */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center justify-between">
+            <span>Lịch sử giao dịch mua gói</span>
+            <span className="text-sm font-normal text-slate-400">Chỉ gói Premium 6 Tháng</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-slate-800 hover:bg-slate-800/50">
+                  <TableHead className="text-slate-400">Khách hàng</TableHead>
+                  <TableHead className="text-slate-400">Email</TableHead>
+                  <TableHead className="text-slate-400">Gói đăng ký</TableHead>
+                  <TableHead className="text-slate-400">Trạng thái</TableHead>
+                  <TableHead className="text-slate-400">Thời gian</TableHead>
+                  <TableHead className="text-slate-400 text-right">Số tiền</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mockPremiumTransactions.map((tx) => (
+                  <TableRow key={tx.id} className="border-slate-800 hover:bg-slate-800/50">
+                    <TableCell className="font-medium text-white">{tx.user}</TableCell>
+                    <TableCell className="text-slate-400">{tx.email}</TableCell>
+                    <TableCell>
+                      <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 flex w-fit items-center gap-1.5">
+                        <Crown className="w-3 h-3" />
+                        Premium (6T)
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-emerald-400">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-sm">Thành công</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-slate-400 text-sm">{tx.date}</TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-bold text-amber-400 text-base">
+                        +{formatCurrency(tx.amount)}
+                      </span>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredBatchRevenue.slice(0, 8).map((batch) => (
-                    <TableRow 
-                      key={batch.id}
-                      className="border-slate-800 hover:bg-slate-800/50"
-                    >
-                      <TableCell className="font-medium text-white">{batch.batchName}</TableCell>
-                      <TableCell>{getQualityBadge(batch.qualityGrade)}</TableCell>
-                      <TableCell>{getStatusBadge(batch.status)}</TableCell>
-                      <TableCell className="text-slate-300">{batch.quantity}kg</TableCell>
-                      <TableCell className="text-slate-300">
-                        {batch.pricePerKg > 0 ? formatCurrency(batch.pricePerKg) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {batch.totalRevenue > 0 ? (
-                          <span className="font-semibold text-cyan-400">
-                            {formatCurrency(batch.totalRevenue)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Year-over-Year Comparison */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white">So sánh doanh thu năm 2026 vs 2025</h2>
-            <p className="text-slate-400 mt-1">Phân tích tăng trưởng và hiệu suất theo từng tháng</p>
-          </div>
+      <div className="space-y-6 pt-4">
+        <div>
+          <h2 className="text-2xl font-bold text-white">So sánh tăng trưởng YoY (2026 vs 2025)</h2>
+          <p className="text-slate-400 mt-1">Phân tích lượng người dùng đăng ký mới theo từng tháng</p>
         </div>
 
         {/* YoY Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20">
             <CardContent className="p-6">
-              <p className="text-sm text-slate-400 mb-2">Tổng doanh thu YTD 2026</p>
-              <p className="text-2xl font-bold text-blue-400">
+              <p className="text-sm text-slate-400 mb-2">Doanh thu YTD 2026</p>
+              <p className="text-3xl font-bold text-blue-400">
                 {formatShortCurrency(yearOverYearSummary.totalRevenue2026)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Jan - Mar 2026 (3 tháng)</p>
+              <p className="text-xs text-slate-500 mt-1">Lũy kế 6 tháng đầu năm</p>
             </CardContent>
           </Card>
 
           <Card className="bg-gradient-to-br from-slate-700/10 to-slate-600/10 border-slate-600/20">
             <CardContent className="p-6">
-              <p className="text-sm text-slate-400 mb-2">Tổng doanh thu YTD 2025</p>
-              <p className="text-2xl font-bold text-slate-400">
+              <p className="text-sm text-slate-400 mb-2">Doanh thu YTD 2025</p>
+              <p className="text-3xl font-bold text-slate-400">
                 {formatShortCurrency(yearOverYearSummary.ytdRevenue2025)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Jan - Mar 2025 (3 tháng)</p>
+              <p className="text-xs text-slate-500 mt-1">Lũy kế 6 tháng đầu năm</p>
             </CardContent>
           </Card>
 
           <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20">
             <CardContent className="p-6">
-              <p className="text-sm text-slate-400 mb-2">Tăng trưởng YTD</p>
+              <p className="text-sm text-slate-400 mb-2">Tăng trưởng doanh thu</p>
               <div className="flex items-center gap-2">
-                <p className="text-2xl font-bold text-green-400">
+                <p className="text-3xl font-bold text-green-400">
                   +{yearOverYearSummary.ytdGrowth.toFixed(1)}%
                 </p>
-                <TrendingUp className="w-5 h-5 text-green-400" />
+                <TrendingUp className="w-6 h-6 text-green-400" />
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                +{formatShortCurrency(yearOverYearSummary.totalRevenue2026 - yearOverYearSummary.ytdRevenue2025)}
+              <p className="text-sm text-green-400/80 mt-1 font-medium">
+                +{formatShortCurrency(yearOverYearSummary.totalRevenue2026 - yearOverYearSummary.ytdRevenue2025)} so với năm trước
               </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20">
-            <CardContent className="p-6">
-              <p className="text-sm text-slate-400 mb-2">TB doanh thu/mẻ 2026</p>
-              <p className="text-2xl font-bold text-purple-400">
-                {formatShortCurrency(yearOverYearSummary.avgRevenue2026)}
-              </p>
-              <div className="flex items-center gap-1 mt-1">
-                <TrendingUp className="w-3 h-3 text-green-400" />
-                <p className="text-xs text-green-400">
-                  +{((yearOverYearSummary.avgRevenue2026 / yearOverYearSummary.avgRevenue2025 - 1) * 100).toFixed(1)}%
-                </p>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -469,7 +372,7 @@ export default function Revenue() {
           <CardContent>
             <ResponsiveContainer width="100%" height={400}>
               <ComposedChart data={mockYearOverYearRevenue}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis 
                   dataKey="month" 
                   stroke="#94a3b8"
@@ -497,16 +400,18 @@ export default function Revenue() {
                 <Bar 
                   yAxisId="left"
                   dataKey="currentYear" 
-                  fill="#3b82f6" 
+                  fill="#fbbf24" 
                   name="Năm 2026"
-                  radius={[8, 8, 0, 0]}
+                  radius={[6, 6, 0, 0]}
+                  barSize={40}
                 />
                 <Bar 
                   yAxisId="left"
                   dataKey="previousYear" 
                   fill="#64748b" 
                   name="Năm 2025"
-                  radius={[8, 8, 0, 0]}
+                  radius={[6, 6, 0, 0]}
+                  barSize={40}
                 />
                 <Line 
                   yAxisId="right"
@@ -515,7 +420,7 @@ export default function Revenue() {
                   stroke="#10b981" 
                   strokeWidth={3}
                   name="Tăng trưởng"
-                  dot={{ fill: '#10b981', r: 5 }}
+                  dot={{ fill: '#10b981', r: 5, strokeWidth: 0 }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -525,7 +430,7 @@ export default function Revenue() {
         {/* YoY Comparison Table */}
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-white">Bảng so sánh chi tiết theo tháng</CardTitle>
+            <CardTitle className="text-white">Chi tiết đăng ký Premium theo tháng</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -534,9 +439,9 @@ export default function Revenue() {
                   <TableRow className="border-slate-800 hover:bg-slate-800/50">
                     <TableHead className="text-slate-400">Tháng</TableHead>
                     <TableHead className="text-slate-400 text-right">Doanh thu 2026</TableHead>
-                    <TableHead className="text-slate-400 text-right">Số mẻ 2026</TableHead>
+                    <TableHead className="text-slate-400 text-center">User Đăng ký (2026)</TableHead>
                     <TableHead className="text-slate-400 text-right">Doanh thu 2025</TableHead>
-                    <TableHead className="text-slate-400 text-right">Số mẻ 2025</TableHead>
+                    <TableHead className="text-slate-400 text-center">User Đăng ký (2025)</TableHead>
                     <TableHead className="text-slate-400 text-right">Chênh lệch</TableHead>
                     <TableHead className="text-slate-400 text-right">% Tăng trưởng</TableHead>
                   </TableRow>
@@ -544,59 +449,48 @@ export default function Revenue() {
                 <TableBody>
                   {mockYearOverYearRevenue.map((item) => {
                     const difference = item.currentYear - item.previousYear;
-                    const isCompleted = item.currentYear > 0;
                     
                     return (
                       <TableRow 
                         key={item.monthNumber}
-                        className={`border-slate-800 hover:bg-slate-800/50 ${!isCompleted ? 'opacity-40' : ''}`}
+                        className="border-slate-800 hover:bg-slate-800/50"
                       >
                         <TableCell className="font-medium text-white">{item.month}</TableCell>
-                        <TableCell className="text-right">
-                          {isCompleted ? (
-                            <span className="text-blue-400 font-semibold">
-                              {formatCurrency(item.currentYear)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">Chưa có dữ liệu</span>
-                          )}
+                        <TableCell className="text-right text-amber-400 font-semibold">
+                          {formatCurrency(item.currentYear)}
                         </TableCell>
-                        <TableCell className="text-right text-slate-300">
-                          {isCompleted ? item.batches2026 : '-'}
+                        <TableCell className="text-center text-slate-300">
+                          <Badge variant="outline" className="border-slate-600 bg-slate-800/50 text-slate-300">
+                            <Users className="w-3 h-3 mr-1" /> {item.subs2026}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right text-slate-400">
                           {formatCurrency(item.previousYear)}
                         </TableCell>
-                        <TableCell className="text-right text-slate-400">
-                          {item.batches2025}
+                        <TableCell className="text-center text-slate-400">
+                          <Badge variant="outline" className="border-slate-700 bg-transparent text-slate-500">
+                            <Users className="w-3 h-3 mr-1" /> {item.subs2025}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          {isCompleted ? (
-                            <span className={difference >= 0 ? 'text-green-400' : 'text-red-400'}>
-                              {difference >= 0 ? '+' : ''}{formatCurrency(difference)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">-</span>
-                          )}
+                          <span className={difference >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {difference >= 0 ? '+' : ''}{formatCurrency(difference)}
+                          </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          {isCompleted && item.growth > 0 ? (
-                            <div className="flex items-center justify-end gap-1">
-                              {item.growth >= 0 ? (
-                                <>
-                                  <TrendingUp className="w-4 h-4 text-green-400" />
-                                  <span className="font-semibold text-green-400">+{item.growth.toFixed(1)}%</span>
-                                </>
-                              ) : (
-                                <>
-                                  <TrendingDown className="w-4 h-4 text-red-400" />
-                                  <span className="font-semibold text-red-400">{item.growth.toFixed(1)}%</span>
-                                </>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-600">-</span>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {item.growth >= 0 ? (
+                              <>
+                                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                                <span className="font-semibold text-emerald-400">+{item.growth.toFixed(1)}%</span>
+                              </>
+                            ) : (
+                              <>
+                                <TrendingDown className="w-4 h-4 text-red-400" />
+                                <span className="font-semibold text-red-400">{item.growth.toFixed(1)}%</span>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -604,26 +498,26 @@ export default function Revenue() {
                   
                   {/* Summary Row */}
                   <TableRow className="border-slate-800 bg-slate-800/30 font-bold">
-                    <TableCell className="text-white">Tổng cộng (YTD)</TableCell>
-                    <TableCell className="text-right text-blue-400">
+                    <TableCell className="text-white">Tổng cộng (6 Tháng)</TableCell>
+                    <TableCell className="text-right text-amber-400">
                       {formatCurrency(yearOverYearSummary.totalRevenue2026)}
                     </TableCell>
-                    <TableCell className="text-right text-slate-300">
-                      {yearOverYearSummary.totalBatches2026}
+                    <TableCell className="text-center text-slate-300">
+                      {yearOverYearSummary.totalSubs2026} Users
                     </TableCell>
                     <TableCell className="text-right text-slate-400">
                       {formatCurrency(yearOverYearSummary.ytdRevenue2025)}
                     </TableCell>
-                    <TableCell className="text-right text-slate-400">
-                      {yearOverYearSummary.ytdBatches2025}
+                    <TableCell className="text-center text-slate-400">
+                      {yearOverYearSummary.ytdSubs2025} Users
                     </TableCell>
-                    <TableCell className="text-right text-green-400">
+                    <TableCell className="text-right text-emerald-400">
                       +{formatCurrency(yearOverYearSummary.totalRevenue2026 - yearOverYearSummary.ytdRevenue2025)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <TrendingUp className="w-4 h-4 text-green-400" />
-                        <span className="text-green-400">+{yearOverYearSummary.ytdGrowth.toFixed(1)}%</span>
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400">+{yearOverYearSummary.ytdGrowth.toFixed(1)}%</span>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -632,58 +526,6 @@ export default function Revenue() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Insights */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="w-5 h-5 text-green-400" />
-                </div>
-                <div>
-                  <h4 className="text-white font-semibold mb-2">Tháng tăng trưởng mạnh nhất</h4>
-                  <p className="text-2xl font-bold text-green-400">Tháng 2</p>
-                  <p className="text-sm text-slate-400 mt-1">+24.9% so với cùng kỳ năm trước</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                  <ShoppingCart className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <h4 className="text-white font-semibold mb-2">Tăng số lượng mẻ bánh</h4>
-                  <p className="text-2xl font-bold text-blue-400">+{yearOverYearSummary.totalBatches2026 - yearOverYearSummary.ytdBatches2025}</p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    +{(((yearOverYearSummary.totalBatches2026 - yearOverYearSummary.ytdBatches2025) / yearOverYearSummary.ytdBatches2025) * 100).toFixed(1)}% mẻ bánh trong Q1
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                  <Award className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <h4 className="text-white font-semibold mb-2">Cải thiện chất lượng</h4>
-                  <p className="text-2xl font-bold text-purple-400">
-                    +{formatShortCurrency(yearOverYearSummary.avgRevenue2026 - yearOverYearSummary.avgRevenue2025)}
-                  </p>
-                  <p className="text-sm text-slate-400 mt-1">Tăng giá trị trung bình mỗi mẻ</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </div>
   );

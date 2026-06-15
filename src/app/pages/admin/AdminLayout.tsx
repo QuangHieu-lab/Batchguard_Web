@@ -21,12 +21,11 @@ import { FarmProvider } from '../../contexts/FarmContext';
 import { toast } from 'sonner';
 
 const adminMenuItems = [
-  { path: '/admin', icon: LayoutDashboard, label: 'Tổng quan' },
+
   { path: '/admin/farms', icon: Factory, label: 'Quản lý Trang trại' },
   { path: '/admin/revenue', icon: DollarSign, label: 'Doanh thu' },
   { path: '/admin/users', icon: Users, label: 'Quản lý người dùng' },
   { path: '/admin/ai-performance', icon: BrainCircuit, label: 'Độ tin cậy AI' },
-  { path: '/admin/drying-cycles', icon: Sun, label: 'Chu kỳ phơi' },
 ];
 
 export default function AdminLayout() {

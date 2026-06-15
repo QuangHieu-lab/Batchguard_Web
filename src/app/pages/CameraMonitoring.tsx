@@ -2,19 +2,11 @@ import { useState, useEffect } from "react";
 import { Activity, Plus } from "lucide-react";
 import { useSystem } from "../contexts/SystemContext";
 import { useWeather } from "../hooks/useWeather";
-import { MultiCameraView, CameraData } from "../components/MultiCameraView"; // 🚀 Import CameraData
-import { MonitoringLog } from "../components/camera/MonitoringLog";
+import { MultiCameraView, CameraData } from "../components/MultiCameraView"; 
 import { MetricsPanel } from "../components/camera/MetricsPanel";
-import { RiskAlertPanel } from "../components/camera/RiskAlertPanel";
 import { YoloUploadDemo } from "../components/camera/YoloUploadDemo";
 import { RealtimeCameraYolo } from "../components/camera/RealtimeCameraYolo";
 import { AddCameraModal } from "../components/camera/AddCameraModal";
-
-interface LogEntry {
-  time: string;
-  message: string;
-  type: "info" | "warning" | "success" | "alert";
-}
 
 // 🚀 Khởi tạo danh sách Camera mặc định
 const INITIAL_CAMERAS: CameraData[] = [
@@ -27,13 +19,9 @@ const INITIAL_CAMERAS: CameraData[] = [
 export default function CameraMonitoring() {
   const { activeBatch } = useSystem();
   const { currentWeather } = useWeather();
-  const [logs, setLogs] = useState<LogEntry[]>([
-    { time: "13:00", message: "Mẻ bánh bắt đầu - AI Vision phát hiện bánh tráng", type: "success" },
-    { time: "14:15", message: "Độ khô đạt 45% - Tiến độ tốt", type: "info" },
-  ]);
 
   // ===============================================
-  // 🚀 STATE QUẢN LÝ CAMERA (Lifted State)
+  // 🚀 STATE QUẢN LÝ CAMERA 
   // ===============================================
   const [cameras, setCameras] = useState<CameraData[]>(INITIAL_CAMERAS);
   const [selectedCameraId, setSelectedCameraId] = useState<string>(INITIAL_CAMERAS[0].id);
@@ -58,14 +46,6 @@ export default function CameraMonitoring() {
     
     // Tự động focus vào camera mới tạo
     setSelectedCameraId(newId);
-
-    // Ghi Log
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-    setLogs((prev) => [
-      { time: timeStr, message: `[HỆ THỐNG] Đã tạo kết nối Camera mới: ${newCam.name}`, type: "info" },
-      ...prev.slice(0, 9)
-    ]);
   };
 
   // 🚀 Xử lý xóa camera ảo
@@ -78,10 +58,6 @@ export default function CameraMonitoring() {
       }
       return filtered;
     });
-
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-    setLogs(prev => [{ time: timeStr, message: `[HỆ THỐNG] Đã ngắt kết nối Camera ID: ${idToDelete}`, type: "warning" }, ...prev.slice(0, 9)]);
   };
 
   // Mô phỏng nháy đèn báo động cho TẤT CẢ camera
@@ -94,9 +70,6 @@ export default function CameraMonitoring() {
     }, 5000);
     return () => clearInterval(interval);
   }, [activeBatch]);
-
-  // Code Logs...
-  useEffect(() => { /* ... giữ nguyên code cũ ... */ }, [activeBatch]);
 
   return (
     <div className="p-4 md:p-8 space-y-6 text-slate-200">
@@ -129,7 +102,7 @@ export default function CameraMonitoring() {
         </div>
       </div>
 
-      {/* 🚀 TRUYỀN DỮ LIỆU XUỐNG DƯỚI */}
+      {/* 🚀 KHUNG VIEW MULTI CAMERA */}
       <MultiCameraView 
         cameras={cameras}
         selectedCamera={selectedCameraId}
@@ -137,16 +110,12 @@ export default function CameraMonitoring() {
         onDeleteCamera={handleDeleteCamera}
       />
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <MonitoringLog logs={logs} />
-        </div>
-        <div className="space-y-6">
-          <MetricsPanel activeBatch={activeBatch} />
-          {/* ... */}
-        </div>
+      {/* 🚀 CHỈ SỐ MÔI TRƯỜNG & AI PREDICT */}
+      <div className="space-y-6">
+        <MetricsPanel activeBatch={activeBatch} />
       </div>
 
+      {/* 🚀 TÍNH NĂNG AI YOLO */}
       <RealtimeCameraYolo />
       <YoloUploadDemo />
     </div>
