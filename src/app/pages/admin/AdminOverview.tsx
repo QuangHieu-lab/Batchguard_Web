@@ -2,28 +2,64 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { 
   TrendingUp, 
-  TrendingDown, 
   Activity, 
-  CheckCircle2, 
-  XCircle, 
   Clock,
   Camera,
-  AlertTriangle,
-  DollarSign
+  DollarSign,
+  BrainCircuit,
+  Server
 } from 'lucide-react';
-import { mockSystemMetrics, mockRiskAlerts, hourlyBatchData, mockDailyStats, mockRevenueMetrics } from '../../data/adminMockData';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Link } from 'react-router';
+import { 
+  LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, 
+  CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart 
+} from 'recharts';
+import { Link } from 'react-router'; 
+
+// ============================================================================
+// 🚀 DỮ LIỆU MOCK ĐƯỢC CHUẨN HOÁ THEO MÔ HÌNH AI & SAAS 
+// ============================================================================
+
+const aiMetrics = {
+  activeCameras: 42,
+  totalCameras: 45,
+  avgConfidence: 94.5,
+  avgPredictionTime: 285, // phút
+  totalInferencesToday: 1250000,
+  serverUptime: 99.9,
+};
+
+const revenueData = {
+  total: 350500000,
+  subscriptions: 265000000,
+  hardwareRental: 85500000,
+  today: 8500000,
+  growthToday: 12.5,
+};
+
+// Biểu đồ 1: Độ tin cậy (Confidence) của AI Vision theo giờ
+const aiConfidenceData = [
+  { hour: '06:00', confidence: 85, threshold: 80 },
+  { hour: '08:00', confidence: 92, threshold: 80 },
+  { hour: '10:00', confidence: 96, threshold: 80 },
+  { hour: '12:00', confidence: 95, threshold: 80 },
+  { hour: '14:00', confidence: 91, threshold: 80 },
+  { hour: '16:00', confidence: 94, threshold: 80 },
+  { hour: '18:00', confidence: 88, threshold: 80 },
+];
+
+// Biểu đồ 2: Tương quan Thời gian dự đoán khô với Nhiệt độ & Độ ẩm
+const aiDrynessPredictionData = [
+  { time: '08:00', temp: 28, humidity: 75, predictedMinutes: 420 },
+  { time: '10:00', temp: 32, humidity: 65, predictedMinutes: 300 },
+  { time: '12:00', temp: 36, humidity: 55, predictedMinutes: 180 },
+  { time: '14:00', temp: 38, humidity: 50, predictedMinutes: 120 },
+  { time: '16:00', temp: 34, humidity: 60, predictedMinutes: 240 },
+  { time: '18:00', temp: 29, humidity: 70, predictedMinutes: 360 },
+];
 
 export default function AdminOverview() {
-  const metrics = mockSystemMetrics;
-  const revenueMetrics = mockRevenueMetrics;
-  const recentAlerts = mockRiskAlerts.filter(a => a.status === 'active').slice(0, 5);
-
   const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
-    }
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
     return `${(value / 1000).toFixed(0)}K`;
   };
 
@@ -33,340 +69,254 @@ export default function AdminOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Tổng quan hệ thống</h1>
-          <p className="text-slate-400 mt-1">Dashboard quản trị MYLONGAI BatchGuard</p>
+          <p className="text-slate-400 mt-1">Dashboard quản trị AI Models & Kinh doanh</p>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <div className="px-3 py-1.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-            <span className="inline-block w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-            Hệ thống hoạt động
+          <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+            AI Server Online
           </div>
           <div className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300">
             {new Date().toLocaleDateString('vi-VN', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
             })}
           </div>
         </div>
       </div>
 
-      {/* Key Metrics */}
+      {/* ========================================== */}
+      {/* 4 THẺ THỐNG KÊ (KEY METRICS)               */}
+      {/* ========================================== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        
+        {/* Doanh thu tổng (SaaS + Hardware) */}
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Tổng mẻ bánh hôm nay</p>
-                <h3 className="text-3xl font-bold text-white mt-2">{metrics.totalBatchesToday}</h3>
+                <p className="text-sm text-slate-400">Tổng Doanh thu Dịch vụ</p>
+                <h3 className="text-3xl font-bold text-white mt-2">{formatCurrency(revenueData.total)}</h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">+15%</span>
-                  <span className="text-slate-500">vs hôm qua</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">+{revenueData.growthToday}%</span>
+                  <span className="text-slate-500">vs tháng trước</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Activity className="w-6 h-6 text-blue-400" />
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Độ tin cậy của AI Model */}
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Tỷ lệ đạt chuẩn</p>
-                <h3 className="text-3xl font-bold text-white mt-2">{metrics.successRate}%</h3>
+                <p className="text-sm text-slate-400">Độ tin cậy AI (Confidence)</p>
+                <h3 className="text-3xl font-bold text-white mt-2">{aiMetrics.avgConfidence}%</h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
-                  <TrendingDown className="w-4 h-4 text-red-400" />
-                  <span className="text-red-400">-2.3%</span>
-                  <span className="text-slate-500">vs tuần trước</span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-green-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900 border-slate-800">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Đang hoạt động</p>
-                <h3 className="text-3xl font-bold text-white mt-2">{metrics.activeBatches}</h3>
-                <div className="flex items-center gap-1 mt-2 text-sm">
-                  <Clock className="w-4 h-4 text-blue-400" />
-                  <span className="text-slate-400">Trung bình {metrics.avgDryingTime} phút</span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-cyan-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900 border-slate-800">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Camera Online</p>
-                <h3 className="text-3xl font-bold text-white mt-2">
-                  {metrics.camerasOnline}/{metrics.totalCameras}
-                </h3>
-                <div className="flex items-center gap-1 mt-2 text-sm">
-                  {metrics.camerasOnline === metrics.totalCameras ? (
-                    <span className="text-green-400">Tất cả hoạt động</span>
-                  ) : (
-                    <span className="text-yellow-400">1 camera offline</span>
-                  )}
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">+1.2%</span>
+                  <span className="text-slate-500">sau lần train gần nhất</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Camera className="w-6 h-6 text-purple-400" />
+                <BrainCircuit className="w-6 h-6 text-purple-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Thời gian dự đoán khô */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Dự đoán TG phơi TB</p>
+                <h3 className="text-3xl font-bold text-white mt-2">{aiMetrics.avgPredictionTime} <span className="text-lg text-slate-500 font-normal">phút</span></h3>
+                <div className="flex items-center gap-1 mt-2 text-sm">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  <span className="text-slate-400">Tính toán real-time</span>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                <Activity className="w-6 h-6 text-cyan-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Camera hoạt động */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Hạ tầng Camera Edge</p>
+                <h3 className="text-3xl font-bold text-white mt-2">
+                  {aiMetrics.activeCameras}<span className="text-xl text-slate-500 font-medium">/{aiMetrics.totalCameras}</span>
+                </h3>
+                <div className="flex items-center gap-1 mt-2 text-sm">
+                  {aiMetrics.activeCameras === aiMetrics.totalCameras ? (
+                    <span className="text-emerald-400">Hệ thống hoàn hảo</span>
+                  ) : (
+                    <span className="text-rose-400">{aiMetrics.totalCameras - aiMetrics.activeCameras} thiết bị mất kết nối</span>
+                  )}
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Camera className="w-6 h-6 text-blue-400" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts */}
+      {/* ========================================== */}
+      {/* 2 BIỂU ĐỒ AI CỐT LÕI                       */}
+      {/* ========================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Hourly Activity */}
+        
+        {/* Biểu đồ 1: AI Confidence Score */}
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-white">Hoạt động theo giờ (Hôm nay)</CardTitle>
+            <CardTitle className="text-white font-bold text-lg">Độ tin cậy AI Detect (Confidence Score)</CardTitle>
+            <p className="text-sm text-slate-400 font-normal">Sự biến thiên độ chính xác của model YOLOv8 theo điều kiện ánh sáng trong ngày</p>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={hourlyBatchData}>
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={aiConfidenceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="adminOverviewActiveGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} key="stop1-active"/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} key="stop2-active"/>
-                  </linearGradient>
-                  <linearGradient id="adminOverviewCompletedGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} key="stop1-completed"/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} key="stop2-completed"/>
+                  <linearGradient id="colorConfidence" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="hour" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="hour" stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                  itemStyle={{ color: '#fff' }}
                 />
                 <Legend />
                 <Area 
                   type="monotone" 
-                  dataKey="active" 
-                  stroke="#3b82f6" 
-                  fill="url(#adminOverviewActiveGradient)" 
-                  name="Đang phơi"
+                  dataKey="confidence" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={3}
+                  fill="url(#colorConfidence)" 
+                  name="Độ tin cậy (%)"
+                  activeDot={{ r: 6, fill: '#8b5cf6', stroke: '#0f172a', strokeWidth: 2 }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="completed" 
-                  stroke="#10b981" 
-                  fill="url(#adminOverviewCompletedGradient)" 
-                  name="Hoàn thành"
+                <Line 
+                  type="step" 
+                  dataKey="threshold" 
+                  stroke="#ef4444" 
+                  strokeDasharray="5 5" 
+                  name="Ngưỡng cảnh báo (80%)" 
+                  dot={false}
+                  strokeWidth={2}
                 />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Daily Success Rate */}
+        {/* Biểu đồ 2: Dự đoán Độ khô theo Nhiệt độ & Độ ẩm */}
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-white">Tỷ lệ thành công 7 ngày</CardTitle>
+            <CardTitle className="text-white font-bold text-lg">AI Dryness Predict vs Môi trường</CardTitle>
+            <p className="text-sm text-slate-400 font-normal">Tương quan giữa Thời gian phơi dự đoán với Nhiệt độ & Độ ẩm thực tế</p>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={mockDailyStats.slice().reverse()}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#94a3b8"
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
-                />
-                <YAxis stroke="#94a3b8" />
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={aiDrynessPredictionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="time" stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                
+                {/* Trục Y trái cho Phút dự đoán */}
+                <YAxis yAxisId="left" stroke="#3b82f6" tick={{ fill: '#3b82f6' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}p`} />
+                
+                {/* Trục Y phải cho Nhiệt độ / Độ ẩm */}
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#10b981" tick={{ fill: '#10b981' }} axisLine={false} tickLine={false} />
+                
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                  formatter={(value: number) => `${value}%`}
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
                 />
-                <Bar dataKey="successRate" fill="#10b981" name="Tỷ lệ thành công %" radius={[8, 8, 0, 0]} />
-              </BarChart>
+                <Legend />
+                
+                <Bar yAxisId="left" dataKey="predictedMinutes" barSize={30} fill="#3b82f6" name="Dự đoán hoàn thành (Phút)" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={3} name="Nhiệt độ (°C)" dot={{ r: 4 }} />
+                <Line yAxisId="right" type="monotone" dataKey="humidity" stroke="#10b981" strokeWidth={3} name="Độ ẩm (%)" dot={{ r: 4 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue Summary Card */}
-      <Card className="bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border-cyan-500/20">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-cyan-400" />
-              </div>
-              <div>
-                <CardTitle className="text-white">Tổng quan doanh thu</CardTitle>
-                <p className="text-sm text-slate-400 mt-1">Hiệu quả kinh doanh hôm nay</p>
-              </div>
-            </div>
-            <Link to="/admin/revenue">
-              <button className="px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors text-sm font-medium">
-                Xem chi tiết →
-              </button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-lg bg-slate-900/50">
-              <p className="text-sm text-slate-400 mb-1">Hôm nay</p>
-              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(revenueMetrics.today)}</p>
-              <div className="flex items-center gap-1 mt-1 text-xs">
-                <TrendingUp className="w-3 h-3 text-green-400" />
-                <span className="text-green-400">+{revenueMetrics.growth.today.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-900/50">
-              <p className="text-sm text-slate-400 mb-1">Tuần này</p>
-              <p className="text-2xl font-bold text-blue-400">{formatCurrency(revenueMetrics.week)}</p>
-              <div className="flex items-center gap-1 mt-1 text-xs">
-                <TrendingUp className="w-3 h-3 text-green-400" />
-                <span className="text-green-400">+{revenueMetrics.growth.week.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-900/50">
-              <p className="text-sm text-slate-400 mb-1">Tháng này</p>
-              <p className="text-2xl font-bold text-green-400">{formatCurrency(revenueMetrics.month)}</p>
-              <div className="flex items-center gap-1 mt-1 text-xs">
-                <TrendingUp className="w-3 h-3 text-green-400" />
-                <span className="text-green-400">+{revenueMetrics.growth.month.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-900/50">
-              <p className="text-sm text-slate-400 mb-1">Giá trị TB/Mẻ</p>
-              <p className="text-2xl font-bold text-purple-400">{formatCurrency(revenueMetrics.avgPerBatch)}</p>
-              <div className="flex items-center gap-1 mt-1 text-xs">
-                <span className="text-purple-400">{revenueMetrics.conversionRate}% chuyển đổi</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Alerts & Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Alerts */}
-        <Card className="lg:col-span-2 bg-slate-900 border-slate-800">
+      {/* ========================================== */}
+      {/* TỔNG QUAN DOANH THU                        */}
+      {/* ========================================== */}
+      <div className="w-full">
+        <Card className="bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-500/20">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white">Cảnh báo gần đây</CardTitle>
-              <Badge variant="destructive" className="bg-red-500/10 text-red-400 border-red-500/20">
-                {recentAlerts.length} cảnh báo
-              </Badge>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-white">Cơ cấu Doanh thu (Mô hình SaaS)</CardTitle>
+                  <p className="text-sm text-slate-400 mt-1">Phân bổ nguồn thu từ phần mềm và phần cứng</p>
+                </div>
+              </div>
+              <Link to="/admin/revenue">
+                <button className="px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm font-medium">
+                  Xem chi tiết →
+                </button>
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {recentAlerts.map((alert) => (
-                <div 
-                  key={alert.id}
-                  className="flex items-start gap-4 p-4 rounded-lg bg-slate-800/50 border border-slate-700 hover:border-slate-600 transition-colors"
-                >
-                  <div className={`
-                    w-10 h-10 rounded-lg flex items-center justify-center
-                    ${alert.severity === 'critical' ? 'bg-red-500/10' : 
-                      alert.severity === 'high' ? 'bg-orange-500/10' : 
-                      alert.severity === 'medium' ? 'bg-yellow-500/10' : 'bg-blue-500/10'}
-                  `}>
-                    <AlertTriangle className={`w-5 h-5
-                      ${alert.severity === 'critical' ? 'text-red-400' : 
-                        alert.severity === 'high' ? 'text-orange-400' : 
-                        alert.severity === 'medium' ? 'text-yellow-400' : 'text-blue-400'}
-                    `} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-white font-medium">{alert.batchName}</h4>
-                      <Badge 
-                        variant="outline" 
-                        className={`
-                          ${alert.severity === 'critical' ? 'border-red-500/50 text-red-400' : 
-                            alert.severity === 'high' ? 'border-orange-500/50 text-orange-400' : 
-                            alert.severity === 'medium' ? 'border-yellow-500/50 text-yellow-400' : 'border-blue-500/50 text-blue-400'}
-                        `}
-                      >
-                        {alert.severity === 'critical' ? 'Nghiêm trọng' : 
-                         alert.severity === 'high' ? 'Cao' : 
-                         alert.severity === 'medium' ? 'Trung bình' : 'Thấp'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-slate-400">{alert.message}</p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                      <span>{alert.location}</span>
-                      <span>•</span>
-                      <span>{new Date(alert.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Server className="w-4 h-4 text-cyan-400" />
+                  <p className="text-sm text-slate-400">Gói Dịch vụ (Subscriptions)</p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Stats */}
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-white">Thống kê nhanh</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-green-400" />
-                <span className="text-sm text-slate-300">Hoàn thành</span>
+                <p className="text-4xl font-bold text-cyan-400 mb-2">{formatCurrency(revenueData.subscriptions)}</p>
+                <div className="flex items-center justify-between mt-4 text-sm border-t border-slate-800 pt-3">
+                  <span className="text-slate-500">Tỷ trọng doanh thu</span>
+                  <span className="text-slate-300 font-medium">75.6%</span>
+                </div>
               </div>
-              <span className="text-lg font-bold text-green-400">{metrics.completedBatches}</span>
-            </div>
-
-            <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <div className="flex items-center gap-3">
-                <XCircle className="w-5 h-5 text-red-400" />
-                <span className="text-sm text-slate-300">Thất bại</span>
+              
+              <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Camera className="w-4 h-4 text-purple-400" />
+                  <p className="text-sm text-slate-400">Thuê phần cứng (Cameras)</p>
+                </div>
+                <p className="text-4xl font-bold text-purple-400 mb-2">{formatCurrency(revenueData.hardwareRental)}</p>
+                <div className="flex items-center justify-between mt-4 text-sm border-t border-slate-800 pt-3">
+                  <span className="text-slate-500">Tỷ trọng doanh thu</span>
+                  <span className="text-slate-300 font-medium">24.4%</span>
+                </div>
               </div>
-              <span className="text-lg font-bold text-red-400">{metrics.failedBatches}</span>
-            </div>
 
-            <div className="flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <div className="flex items-center gap-3">
-                <Clock className="w-5 h-5 text-blue-400" />
-                <span className="text-sm text-slate-300">Thời gian TB</span>
+              <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-center items-center text-center">
+                <p className="text-sm text-slate-400 mb-2">Giao dịch mới hôm nay</p>
+                <p className="text-4xl font-bold text-emerald-400">+{formatCurrency(revenueData.today)}</p>
+                <Badge variant="outline" className="mt-3 px-3 py-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-sm">
+                  Tăng {revenueData.growthToday}% so với T7
+                </Badge>
               </div>
-              <span className="text-lg font-bold text-blue-400">{metrics.avgDryingTime}m</span>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800">
-              <div className="text-sm text-slate-400 mb-2">Hiệu suất hệ thống</div>
-              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-green-500 to-cyan-500 transition-all"
-                  style={{ width: `${metrics.successRate}%` }}
-                />
-              </div>
-              <div className="text-right text-xs text-slate-500 mt-1">{metrics.successRate}% đạt chuẩn</div>
             </div>
           </CardContent>
         </Card>
       </div>
+
     </div>
   );
 }

@@ -41,7 +41,7 @@ export default function UserManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Quản lý người dùng</h1>
-          <p className="text-slate-400 mt-1">Quản lý tài khoản và phân quyền người dùng</p>
+          <p className="text-slate-400 mt-1">Quản lý tài khoản, phân quyền và trạng thái đăng nhập</p>
         </div>
         <Button className="bg-blue-600 hover:bg-blue-700">
           <UserPlus className="w-4 h-4 mr-2" />
@@ -138,7 +138,6 @@ export default function UserManagement() {
                   <TableHead className="text-slate-400">Vai trò</TableHead>
                   <TableHead className="text-slate-400">Trạng thái</TableHead>
                   <TableHead className="text-slate-400">Đăng nhập lần cuối</TableHead>
-                  <TableHead className="text-slate-400">Batch đã tạo</TableHead>
                   <TableHead className="text-slate-400 text-right">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
@@ -205,14 +204,6 @@ export default function UserManagement() {
                         minute: '2-digit'
                       })}
                     </TableCell>
-                    <TableCell className="text-slate-300">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                          <span className="text-sm font-semibold text-blue-400">{user.batchesCreated}</span>
-                        </div>
-                        <span className="text-sm">batch</span>
-                      </div>
-                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10">
@@ -239,7 +230,7 @@ export default function UserManagement() {
         <CardContent>
           <div className="space-y-4">
             {mockUsers.filter(u => u.status === 'active').slice(0, 5).map((user) => (
-              <div key={user.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50">
+              <div key={user.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold">
                     {user.name.charAt(0)}
@@ -250,8 +241,12 @@ export default function UserManagement() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-slate-400">Số batch</p>
-                  <p className="text-lg font-bold text-blue-400">{user.batchesCreated}</p>
+                  <Badge 
+                    variant="outline" 
+                    className={user.role === 'admin' ? 'border-purple-500/50 text-purple-400' : 'border-blue-500/50 text-blue-400'}
+                  >
+                    {user.role === 'admin' ? 'Quản trị viên' : 'Khách hàng'}
+                  </Badge>
                 </div>
               </div>
             ))}
