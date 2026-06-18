@@ -1,56 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Home, Wifi, Camera, Plus, Settings, X, PlayCircle, Trash2, Link as LinkIcon } from 'lucide-react';
-
-// =========================================================================
-// 🚀 DỮ LIỆU KHỞI TẠO MẶC ĐỊNH
-// =========================================================================
-const INITIAL_HOUSEHOLDS = [
-  { 
-    id: '1', 
-    name: 'Hộ Nguyễn Văn A', 
-    address: 'Ấp 1, Làng nghề Mỹ Lồng',
-    cameras: 2, 
-    sensors: 'Online',  
-    status: 'active',
-    streamUrls: [
-      'rtsp://demo-cam-1.mylong.vn/live',
-      'rtsp://demo-cam-2.mylong.vn/live'
-    ]
-  },
-  { 
-    id: '2', 
-    name: 'Hộ Trần Thị B', 
-    address: 'Ấp 2, Làng nghề Mỹ Lồng',
-    cameras: 3, 
-    sensors: 'Online',  
-    status: 'active',
-    streamUrls: [
-      'rtsp://demo-cam-3.mylong.vn/live'
-    ]
-  },
-  { 
-    id: '3', 
-    name: 'Hợp tác xã Lò Sấy Chung', 
-    address: 'Khu Trung Tâm Mỹ Lồng',
-    cameras: 1, 
-    sensors: 'Offline',  
-    status: 'warning',
-    streamUrls: []
-  },
-];
+import { cameraApi } from '../../../services/endpoints';
+import { toast } from 'sonner';
 
 export default function HouseholdsWebScreen() {
-  // 🚀 Chuyển danh sách hộ thành State để có thể Thêm mới
-  const [households, setHouseholds] = useState(INITIAL_HOUSEHOLDS);
+  const [households, setHouseholds] = useState<any[]>([]);
   
   // State quản lý Modals
-  const [selectedHousehold, setSelectedHousehold] = useState<typeof INITIAL_HOUSEHOLDS[0] | null>(null);
+  const [selectedHousehold, setSelectedHousehold] = useState<any | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // State cho Form Thêm Hộ mới
   const [newName, setNewName] = useState('');
   const [newAddress, setNewAddress] = useState('');
-  const [newUrls, setNewUrls] = useState<string[]>(['']); // Bắt đầu với 1 ô nhập URL trống
+  const [newUrls, setNewUrls] = useState<string[]>(['']); 
+
+  // =========================================================================
+  // GỌI API THẬT
+  // =========================================================================
+  const fetchHouseholds = async () => {
+    try {
+      const data: any = await cameraApi.getAll();
+      
+      // Nhóm camera theo location để tạo thành danh sách Hộ/Trang trại
+      const farmsMap = new Map();
+      data.forEach((cam: any) => {
+         const loc = cam.location || 'Chưa cập nhật địa chỉ';
+         if (!farmsMap.has(loc)) {
+            farmsMap.set(loc, {
+                id: loc, // Dùng location làm ID tạm
+                name: `Khu vực: ${loc}`,
+                address: loc,
+                cameras: 0,
+                sensors: 'Online',
+                status: 'active',
+                streamUrls: []
+            });
+         }
+         const farm = farmsMap.get(loc);
+         farm.cameras += 1;
+         // Giả lập stream URL vì API chưa có trường lưu url
+         farm.streamUrls.push(`rtsp://camera-${cam.id}.mylong.vn/live`);
+      });
+      
+      setHouseholds(Array.from(farmsMap.values()));
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi tải danh sách hộ liên kết');
+    }
+  };
+
+  useEffect(() => {
+    fetchHouseholds();
+  }, []);
 
   // =========================================================================
   // CÁC HÀM XỬ LÝ FORM
@@ -69,33 +71,39 @@ export default function HouseholdsWebScreen() {
     setNewUrls(updatedUrls);
   };
 
-  const handleSubmitNewHousehold = (e: React.FormEvent) => {
+  const handleSubmitNewHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) {
-      alert("Vui lòng nhập tên hộ kinh doanh!");
+      toast.error("Vui lòng nhập tên hộ kinh doanh!");
       return;
     }
 
-    // Lọc bỏ các URL trống
     const validUrls = newUrls.filter(url => url.trim() !== '');
+    const addressToSave = newAddress || newName;
 
-    const newHouse = {
-      id: Date.now().toString(),
-      name: newName,
-      address: newAddress || 'Chưa cập nhật địa chỉ',
-      cameras: validUrls.length,
-      sensors: validUrls.length > 0 ? 'Online' : 'Offline',
-      status: validUrls.length > 0 ? 'active' : 'warning',
-      streamUrls: validUrls
-    };
+    try {
+      // Tạo camera trên DB cho khu vực mới
+      const camerasToCreate = validUrls.length > 0 ? validUrls.length : 1;
+      for (let i = 0; i < camerasToCreate; i++) {
+        await cameraApi.create({
+          name: `${newName} - Camera ${i + 1}`,
+          location: addressToSave
+        });
+      }
 
-    setHouseholds([newHouse, ...households]);
-    
-    // Reset form và đóng modal
-    setNewName('');
-    setNewAddress('');
-    setNewUrls(['']);
-    setIsAddModalOpen(false);
+      toast.success('Thêm hộ liên kết thành công!');
+      
+      setNewName('');
+      setNewAddress('');
+      setNewUrls(['']);
+      setIsAddModalOpen(false);
+
+      // Load lại dữ liệu từ server
+      fetchHouseholds();
+    } catch (error) {
+      toast.error('Lưu trên server thất bại!');
+      console.error(error);
+    }
   };
 
   return (
@@ -218,7 +226,7 @@ export default function HouseholdsWebScreen() {
             <div className="p-6 overflow-y-auto">
               {selectedHousehold.streamUrls.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedHousehold.streamUrls.map((url, idx) => (
+                  {selectedHousehold.streamUrls.map((url: string, idx: number) => (
                     <div key={idx} className="bg-[#151E2F] rounded-2xl overflow-hidden border border-slate-700 group">
                       <div className="p-3 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
                         <span className="text-slate-300 font-medium text-sm">Luồng Camera #{idx + 1}</span>

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { 
@@ -14,21 +15,20 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart 
 } from 'recharts';
 import { Link } from 'react-router'; 
+import { adminApi } from '../../../services/endpoints';
+import { toast } from 'sonner';
 
-// ============================================================================
-// 🚀 DỮ LIỆU MOCK ĐƯỢC CHUẨN HOÁ THEO MÔ HÌNH AI & SAAS 
-// ============================================================================
-
-const aiMetrics = {
+// Dữ liệu Mock dự phòng
+const mockAiMetrics = {
   activeCameras: 42,
   totalCameras: 45,
   avgConfidence: 94.5,
-  avgPredictionTime: 285, // phút
+  avgPredictionTime: 285,
   totalInferencesToday: 1250000,
   serverUptime: 99.9,
 };
 
-const revenueData = {
+const mockRevenueData = {
   total: 350500000,
   subscriptions: 265000000,
   hardwareRental: 85500000,
@@ -36,8 +36,7 @@ const revenueData = {
   growthToday: 12.5,
 };
 
-// Biểu đồ 1: Độ tin cậy (Confidence) của AI Vision theo giờ
-const aiConfidenceData = [
+const mockAiConfidenceData = [
   { hour: '06:00', confidence: 85, threshold: 80 },
   { hour: '08:00', confidence: 92, threshold: 80 },
   { hour: '10:00', confidence: 96, threshold: 80 },
@@ -47,8 +46,7 @@ const aiConfidenceData = [
   { hour: '18:00', confidence: 88, threshold: 80 },
 ];
 
-// Biểu đồ 2: Tương quan Thời gian dự đoán khô với Nhiệt độ & Độ ẩm
-const aiDrynessPredictionData = [
+const mockAiDrynessPredictionData = [
   { time: '08:00', temp: 28, humidity: 75, predictedMinutes: 420 },
   { time: '10:00', temp: 32, humidity: 65, predictedMinutes: 300 },
   { time: '12:00', temp: 36, humidity: 55, predictedMinutes: 180 },
@@ -58,6 +56,61 @@ const aiDrynessPredictionData = [
 ];
 
 export default function AdminOverview() {
+  const [loading, setLoading] = useState(true);
+  const [aiMetrics, setAiMetrics] = useState(mockAiMetrics);
+  const [revenueData, setRevenueData] = useState(mockRevenueData);
+  const [aiConfidenceData, setAiConfidenceData] = useState(mockAiConfidenceData);
+  const [aiDrynessPredictionData, setAiDrynessPredictionData] = useState(mockAiDrynessPredictionData);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch dữ liệu tổng quan
+        try {
+          const overviewRes: any = await adminApi.getOverview();
+          const data = overviewRes?.data || overviewRes;
+          if (data) {
+            if (data.ai_metrics) setAiMetrics({ ...mockAiMetrics, ...data.ai_metrics });
+            if (data.revenue) setRevenueData({ ...mockRevenueData, ...data.revenue });
+          }
+        } catch(e) {
+          console.log("Dùng mock data cho overview");
+        }
+
+        // Fetch biểu đồ confidence
+        try {
+          const confRes: any = await adminApi.getConfidenceChart();
+          const confData = confRes?.data || confRes;
+          if (confData && Array.isArray(confData) && confData.length > 0) {
+            setAiConfidenceData(confData);
+          }
+        } catch(e) {
+          console.log("Dùng mock data cho biểu đồ confidence");
+        }
+
+        // Fetch biểu đồ dryness
+        try {
+          const dryRes: any = await adminApi.getDrynessChart();
+          const dryData = dryRes?.data || dryRes;
+          if (dryData && Array.isArray(dryData) && dryData.length > 0) {
+            setAiDrynessPredictionData(dryData);
+          }
+        } catch(e) {
+          console.log("Dùng mock data cho biểu đồ dryness");
+        }
+
+      } catch (error) {
+        toast.error("Lỗi tải một số dữ liệu, đang dùng dữ liệu dự phòng");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
     return `${(value / 1000).toFixed(0)}K`;
@@ -72,6 +125,7 @@ export default function AdminOverview() {
           <p className="text-slate-400 mt-1">Dashboard quản trị AI Models & Kinh doanh</p>
         </div>
         <div className="flex items-center gap-2 text-sm">
+          {loading && <Activity className="w-4 h-4 text-slate-400 animate-spin" />}
           <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
             AI Server Online
