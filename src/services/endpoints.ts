@@ -33,6 +33,9 @@ export const sensorApi = {
 // ============================================================================
 export const detectionApi = {
   getLatest: (cameraId: string) => apiClient.get(`/detection/latest/${cameraId}`),
+  // THÊM DÒNG NÀY ĐỂ PUSH DATA LÊN SERVER:
+  create: (data: { camera_id: string; detected_count: number; confidence: number }) => 
+    apiClient.post('/detection', data),
 };
 
 // ============================================================================
@@ -58,7 +61,7 @@ export const weatherApi = {
 // 7. ADMIN DASHBOARD & REVENUE
 // ============================================================================
 export const adminApi = {
-  getOverview: () => apiClient.get('/dashboard/admin'),
+  getOverview: () => apiClient.get('/dashboard/overview'),
   getConfidenceChart: () => apiClient.get('/dashboard/admin/confidence-chart'),
   getDrynessChart: () => apiClient.get('/dashboard/admin/dryness-chart'),
   getSubscriptions: () => apiClient.get('/subscriptions'),

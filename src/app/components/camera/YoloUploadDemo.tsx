@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Upload, Scan, Tag, Crosshair, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner'; // Thêm thư viện thông báo
+import { detectionApi } from '../../../services/endpoints'; // Đảm bảo đường dẫn này trỏ đúng file endpoints.ts của bạn
 
 interface YoloUploadDemoProps {}
 
@@ -15,7 +17,7 @@ const CLASS_NAMES: Record<number, string> = {
 };
 
 // ==========================================
-// 2. HÀM NÉN ẢNH TRƯỚC KHI UPLOAD (CHỐNG TRÀN RAM SERVER)
+// 2. HÀM NÉN ẢNH TRƯỚC KHI UPLOAD
 // ==========================================
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
@@ -26,12 +28,11 @@ const compressImage = (file: File): Promise<File> => {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 640; // Đưa về chuẩn đầu vào lý tưởng của YOLO
+        const MAX_WIDTH = 640; 
         const MAX_HEIGHT = 640;
         let width = img.width;
         let height = img.height;
 
-        // Tính toán tỷ lệ giữ nguyên khung hình
         if (width > height) {
           if (width > MAX_WIDTH) {
             height *= MAX_WIDTH / width;
@@ -49,14 +50,12 @@ const compressImage = (file: File): Promise<File> => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Nén ảnh sang định dạng JPEG với chất lượng 80%
         canvas.toBlob((blob) => {
           if (blob) {
-            // Thay đổi đuôi file thành .jpg để đồng nhất định dạng
             const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
             resolve(new File([blob], newFileName, { type: 'image/jpeg' }));
           } else {
-            resolve(file); // Nếu lỗi canvas, trả về ảnh gốc để không bị kẹt
+            resolve(file); 
           }
         }, 'image/jpeg', 0.8);
       };
@@ -76,35 +75,32 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
   } | null>(null);
 
   // ==========================================
-  // 3. XỬ LÝ UPLOAD VÀ GỌI API
+  // 3. XỬ LÝ UPLOAD VÀ GỌI API (YOLO + DATABASE)
   // ==========================================
   const handleYoloUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const originalFile = e.target.files?.[0];
     if (!originalFile) return;
 
-    // Bật loading sớm để báo cho user biết hệ thống đang xử lý (Bao gồm thời gian nén ảnh)
     setYoloLoading(true);
     setYoloError(null);
     setYoloResult(null);
     
     try {
-      // 🚀 Thực hiện nén ảnh trước khi đẩy lên Server
+      // 1. Nén ảnh
       const compressedFile = await compressImage(originalFile);
-      
-      // Hiển thị Preview bằng ảnh đã được nén
       setYoloPreviewUrl(URL.createObjectURL(compressedFile));
 
       const formData = new FormData();
       formData.append('file', compressedFile);
       
-      // Lấy URL từ biến môi trường
-      const API_BASE_URL = (import.meta as any).VITE_API_URL || 'https://mylongai-backend-v2.onrender.com';
+      // Lấy URL của Server Python YOLO
+      const API_BASE_URL = (import.meta as any).env?.VITE_AI_URL || 'https://mylongai-backend-v2.onrender.com';
       let response: Response | null = null;
       
-      // Vòng lặp Retry thông minh chống Render ngủ gật
+      // 2. Gửi cho Python YOLO Server
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) {
-          setYoloError(`Server đang khởi động... thử lại (${attempt}/2)`);
+          setYoloError(`Server AI đang khởi động... thử lại (${attempt}/2)`);
           await new Promise(r => setTimeout(r, 4000));
         }
         response = await fetch(`${API_BASE_URL}/ai/detect`, { 
@@ -117,8 +113,8 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
         response = null;
       }
       
-      if (!response) throw new Error('Server chưa sẵn sàng, vui lòng thử lại sau 30 giây');
-      if (!response.ok) throw new Error(`HTTP Lỗi ${response.status}: Server bị quá tải hoặc từ chối kết nối`);
+      if (!response) throw new Error('Server AI chưa sẵn sàng');
+      if (!response.ok) throw new Error(`Lỗi kết nối AI (HTTP ${response.status})`);
       
       setYoloError(null);
       const data = await response.json();
@@ -131,13 +127,41 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
       }));
       
       const imageUrl: string | undefined = data.image ? `data:image/jpeg;base64,${data.image}` : data.image_url ?? undefined;
-      setYoloResult({ count: detections.length, detections, imageUrl });
+      const detectedCount = detections.length;
+      
+      // Hiển thị kết quả lên màn hình
+      setYoloResult({ count: detectedCount, detections, imageUrl });
+
+      // -------------------------------------------------------------
+      // 🚀 BƯỚC MỚI: LƯU VÀO DATABASE ĐỂ HIỆN LÊN ADMIN DASHBOARD
+      // -------------------------------------------------------------
+      if (detectedCount > 0) {
+        // Tính độ tin cậy trung bình của bức ảnh này
+     const totalConf = detections.reduce((sum: number, item: any) => sum + item.confidence, 0);
+        let avgConfidence = totalConf / detectedCount;
+        
+        // Nếu Python trả về confidence dạng 95 thay vì 0.95 thì chia 100 để lưu DB cho chuẩn logic chung
+        if (avgConfidence > 1) {
+          avgConfidence = avgConfidence / 100;
+        }
+
+        try {
+          await detectionApi.create({
+            camera_id: "demo-upload-camera-001", // Dùng ID tạm vì đây là upload thủ công
+            detected_count: detectedCount,
+            confidence: Number(avgConfidence.toFixed(4)) // Làm tròn 4 chữ số thập phân
+          });
+          toast.success('Đã lưu kết quả quét ảnh vào hệ thống Dashboard!');
+        } catch (dbError) {
+          console.error("Lỗi khi lưu vào DB:", dbError);
+          // Ta chỉ in lỗi chứ không throw, để không làm sập giao diện hiển thị ảnh của người dùng
+        }
+      }
       
     } catch (err: any) {
-      setYoloError(err.message ?? 'Lỗi kết nối YOLO API');
+      setYoloError(err.message ?? 'Lỗi kết nối API');
     } finally {
       setYoloLoading(false);
-      // Reset input để có thể upload lại cùng một file nếu muốn
       if (yoloFileInputRef.current) {
         yoloFileInputRef.current.value = '';
       }

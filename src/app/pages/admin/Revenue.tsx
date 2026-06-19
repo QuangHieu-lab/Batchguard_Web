@@ -90,18 +90,18 @@ export default function Revenue() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch Subscriptions
+        // 🚀 CẬP NHẬT 1: Fetch Lịch sử giao dịch thật
         try {
           const subsRes: any = await adminApi.getSubscriptions();
           const subsData = subsRes?.data || subsRes;
-          if (subsData && Array.isArray(subsData)) {
+          if (subsData && Array.isArray(subsData) && subsData.length > 0) {
             const mappedTxs = subsData.map((s: any) => ({
               id: s.id,
-              user: s.user_name || 'Khách hàng',
-              email: s.user_email || '',
+              user: s.user_name || 'Khách hàng', // Dựa vào API có thể trả về user_id, fallback chữ Khách hàng
+              email: s.package_name || '', // Map package_name vào cột email theo cấu trúc của bạn
               amount: s.amount || PREMIUM_PRICE,
-              date: new Date(s.created_at || new Date()).toLocaleString('vi-VN'),
-              status: s.status || 'success'
+              date: new Date(s.transaction_time || new Date()).toLocaleString('vi-VN'),
+              status: s.payment_status || 'success'
             }));
             setTransactions(mappedTxs);
           }
@@ -109,15 +109,19 @@ export default function Revenue() {
           console.log("Dùng mock data cho subscriptions");
         }
 
-        // Fetch Revenue Statistics
+        // 🚀 CẬP NHẬT 2: Fetch Thống kê Doanh thu thật
         try {
           const statsRes: any = await adminApi.getRevenueStatistics();
           const statsData = statsRes?.data || statsRes;
+          
           if (statsData) {
-            if (statsData.metrics) setMetrics({ ...mockPremiumMetrics, ...statsData.metrics });
-            if (statsData.dailyRevenue) setDailyRevenue(statsData.dailyRevenue);
-            if (statsData.monthlyRevenue) setMonthlyRevenue(statsData.monthlyRevenue);
-            if (statsData.yoyRevenue) setYoyRevenue(statsData.yoyRevenue);
+            // API trả về { today: 500000, month: 15000000, year: 120000000 }
+            // Cập nhật đè lên metrics hiện tại, giữ lại week/growth/totalSubscribers vì API chưa có
+            setMetrics(prev => ({
+              ...prev,
+              today: statsData.today !== undefined ? statsData.today : prev.today,
+              month: statsData.month !== undefined ? statsData.month : prev.month,
+            }));
           }
         } catch(e) {
           console.log("Dùng mock data cho revenue statistics");
@@ -363,7 +367,7 @@ export default function Revenue() {
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-emerald-400">
                         <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-sm">{tx.status === 'success' ? 'Thành công' : tx.status}</span>
+                        <span className="text-sm">{tx.status === 'success' || tx.status === 'paid' ? 'Thành công' : tx.status}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-slate-400 text-sm">{tx.date}</TableCell>
