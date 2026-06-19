@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi } from '../../services/endpoints';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'customer' | 'producer'; // admin, customer (chủ hộ sản xuất), or producer
+  role: 'admin' | 'customer' | 'producer' | 'disabled'; // Thêm disabled vào type để khỏi lỗi TS
 }
 
 interface AuthContextType {
@@ -22,83 +23,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Dời hàm logout lên đây để useEffect bên dưới có thể gọi được khi phát hiện user bị khóa
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('mylongai_user');
+    localStorage.removeItem('access_token');
+  };
+
   // Check for existing session on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('mylongai_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const checkSession = async () => {
+      const storedUser = localStorage.getItem('mylongai_user');
+      const token = localStorage.getItem('access_token');
+
+      if (storedUser && token) {
+        try {
+          // Gọi API để check xem user có đang bị admin khóa không
+          const profile: any = await authApi.getProfile();
+          
+          if (profile.role === 'disabled') {
+            logout(); // Bị admin khóa -> Xóa session
+          } else {
+            setUser(JSON.parse(storedUser));
+          }
+        } catch (error) {
+          logout(); // Token lỗi hoặc hết hạn -> Xóa session
+        }
+      }
+      setIsLoading(false);
+    };
+
+    checkSession();
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Mock users database
-      const mockUsers = [
-        {
-          id: 'admin-001',
-          email: 'admin@mylongai.com',
-          password: 'admin123',
-          name: 'Admin System',
-          role: 'admin' as const
-        },
-        {
-          id: 'admin-002',
-          email: 'admin@example.com',
-          password: 'admin',
-          name: 'Quản trị viên',
-          role: 'admin' as const
-        },
-        {
-          id: 'customer-001',
-          email: 'customer@mylongai.com',
-          password: 'customer123',
-          name: 'Nguyễn Văn A',
-          role: 'customer' as const
-        },
-        {
-          id: 'customer-002',
-          email: 'producer@example.com',
-          password: 'producer',
-          name: 'Chủ hộ sản xuất',
-          role: 'customer' as const
-        },
-        {
-          id: 'customer-003',
-          email: 'user@example.com',
-          password: 'user123',
-          name: 'Người dùng',
-          role: 'customer' as const
-        }
-      ];
-
-      // Find user by email and password
-      const foundUser = mockUsers.find(
-        u => u.email === email && u.password === password
-      );
-
-      if (!foundUser) {
-        throw new Error('Invalid email or password');
+      const response: any = await authApi.login({ email, password });
+      
+      // 🚀 CHẶN NGAY TẠI ĐÂY NẾU ROLE BỊ KHÓA
+      if (response.role === 'disabled') {
+        throw new Error('Tài khoản của bạn đã bị khóa bởi Quản trị viên');
       }
 
-      // Create user object without password
-      const mockUser: User = {
-        id: foundUser.id,
-        email: foundUser.email,
-        name: foundUser.name,
-        role: foundUser.role
+      const loggedInUser: User = {
+        id: response.user_id,
+        email: email,
+        name: response.name,
+        role: response.role
       };
 
-      // Save to localStorage first
-      localStorage.setItem('mylongai_user', JSON.stringify(mockUser));
+      // Save token and user
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('mylongai_user', JSON.stringify(loggedInUser));
 
-      // Then update state - this will trigger re-render
-      setUser(mockUser);
+      setUser(loggedInUser);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw error; // Quăng lỗi ra để Login screen hiện thông báo
     } finally {
       setIsLoading(false);
     }
@@ -108,30 +91,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Mock registration - new users are customers by default
-      const mockUser: User = {
-        id: Date.now().toString(),
-        email,
-        name,
-        role: 'customer'
-      };
-
-      // Save to localStorage first
-      localStorage.setItem('mylongai_user', JSON.stringify(mockUser));
-
-      // Then update state - this will trigger re-render
-      setUser(mockUser);
+      const response: any = await authApi.register({ email, password, name });
+      
+      if (response.success) {
+        await login(email, password);
+      } else {
+        throw new Error('Registration failed');
+      }
+    } catch (error: any) {
+      console.error('Register error:', error);
+      throw error;
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('mylongai_user');
   };
 
   return (

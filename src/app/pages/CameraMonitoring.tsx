@@ -2,19 +2,13 @@ import { useState, useEffect } from "react";
 import { Activity, Plus } from "lucide-react";
 import { useSystem } from "../contexts/SystemContext";
 import { useWeather } from "../hooks/useWeather";
+import { cameraApi, detectionApi } from "../../services/endpoints";
+import { toast } from "sonner";
 import { MultiCameraView, CameraData } from "../components/MultiCameraView"; 
 import { MetricsPanel } from "../components/camera/MetricsPanel";
 import { YoloUploadDemo } from "../components/camera/YoloUploadDemo";
 import { RealtimeCameraYolo } from "../components/camera/RealtimeCameraYolo";
 import { AddCameraModal } from "../components/camera/AddCameraModal";
-
-// 🚀 Khởi tạo danh sách Camera mặc định
-const INITIAL_CAMERAS: CameraData[] = [
-  { id: 'CAM-01', name: 'Camera Khu A', zone: 'Khu vực A - Sân phơi chính', status: 'active', hasDetection: true },
-  { id: 'CAM-02', name: 'Camera Khu B', zone: 'Khu vực B - Sân phơi phụ', status: 'active', hasDetection: false },
-  { id: 'CAM-03', name: 'Camera Khu C', zone: 'Khu vực C - Khu dự phòng', status: 'active', hasDetection: false },
-  { id: 'CAM-04', name: 'Camera Khu D', zone: 'Khu vực D - Khu thử nghiệm', status: 'active', hasDetection: false },
-];
 
 export default function CameraMonitoring() {
   const { activeBatch } = useSystem();
@@ -23,53 +17,110 @@ export default function CameraMonitoring() {
   // ===============================================
   // 🚀 STATE QUẢN LÝ CAMERA 
   // ===============================================
-  const [cameras, setCameras] = useState<CameraData[]>(INITIAL_CAMERAS);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>(INITIAL_CAMERAS[0].id);
+  const [cameras, setCameras] = useState<CameraData[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // Xử lý tạo camera ảo
-  const handleAddNewCamera = (newCamData: any) => {
-    // Tạo ID mới kiểu CAM-05, CAM-06...
-    const newId = `CAM-${(cameras.length + 1).toString().padStart(2, '0')}`;
+  const fetchCameras = async () => {
+    try {
+      const data: any = await cameraApi.getAll();
+      const formattedCameras: CameraData[] = data.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        zone: c.location,
+        status: 'active',
+        hasDetection: false,
+      }));
+      setCameras(formattedCameras);
+      if (formattedCameras.length > 0 && !selectedCameraId) {
+        setSelectedCameraId(formattedCameras[0].id);
+      }
+    } catch (error) {
+      console.error('Lỗi tải danh sách camera:', error);
+      toast.error('Không thể tải danh sách camera');
+    }
+  };
+
+  useEffect(() => {
+    fetchCameras();
+  }, []);
+
+  const handleAddNewCamera = async (newCamData: any) => {
+    try {
+      const res: any = await cameraApi.create({
+        name: newCamData.name,
+        location: newCamData.location
+      });
+      if (res.success) {
+        toast.success('Thêm camera thành công');
+        fetchCameras();
+      }
+    } catch (error) {
+      toast.error('Thêm camera thất bại');
+      console.error(error);
+    }
+  };
+
+  const handleDeleteCamera = async (idToDelete: string) => {
+    try {
+      const res: any = await cameraApi.delete(idToDelete);
+      if (res.success) {
+        toast.success('Đã xóa camera');
+        setCameras(prev => {
+          const filtered = prev.filter(c => c.id !== idToDelete);
+          if (selectedCameraId === idToDelete && filtered.length > 0) {
+            setSelectedCameraId(filtered[0].id);
+          } else if (filtered.length === 0) {
+            setSelectedCameraId('');
+          }
+          return filtered;
+        });
+      }
+    } catch (error) {
+      toast.error('Xóa camera thất bại');
+      console.error(error);
+    }
+  };
+
+  // 🚀 Tích hợp API Detection thật
+  useEffect(() => {
+    if (cameras.length === 0) return;
     
-    const newCam: CameraData = {
-      id: newId,
-      name: newCamData.name,
-      zone: newCamData.location,
-      status: 'active',
-      hasDetection: false,
-      streamUrl: newCamData.streamUrl // Lưu lại link ảo
+    let isMounted = true;
+    
+    const checkDetectionsReal = async () => {
+      const updatedPromises = cameras.map(async (cam) => {
+        try {
+          const res: any = await detectionApi.getLatest(cam.id);
+          const data = res?.data || res;
+          
+          // Kiểm tra xem có nhận diện được bánh tráng hay không
+          const hasDet = data?.has_detection || (data?.objects && data.objects.length > 0) || false;
+          
+          return { ...cam, hasDetection: hasDet };
+        } catch (e) { 
+          return { ...cam, hasDetection: false }; 
+        }
+      });
+
+      const resolvedCameras = await Promise.all(updatedPromises);
+      
+      if (isMounted) {
+        setCameras(resolvedCameras);
+      }
     };
 
-    // Đẩy vào danh sách
-    setCameras(prev => [...prev, newCam]);
+    // Chạy ngay lần đầu
+    checkDetectionsReal();
     
-    // Tự động focus vào camera mới tạo
-    setSelectedCameraId(newId);
-  };
-
-  // 🚀 Xử lý xóa camera ảo
-  const handleDeleteCamera = (idToDelete: string) => {
-    setCameras(prev => {
-      const filtered = prev.filter(c => c.id !== idToDelete);
-      // Nếu xóa trúng camera đang xem, tự chuyển sang cái đầu tiên
-      if (selectedCameraId === idToDelete && filtered.length > 0) {
-        setSelectedCameraId(filtered[0].id);
-      }
-      return filtered;
-    });
-  };
-
-  // Mô phỏng nháy đèn báo động cho TẤT CẢ camera
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCameras(prev => prev.map((cam, idx) => ({
-        ...cam,
-        hasDetection: idx === 0 ? Boolean(activeBatch) : Math.random() > 0.7,
-      })));
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [activeBatch]);
+    // Polling mỗi 10 giây
+    const intervalId = setInterval(checkDetectionsReal, 10000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [cameras.length]);
 
   return (
     <div className="p-4 md:p-8 space-y-6 text-slate-200">
@@ -112,7 +163,11 @@ export default function CameraMonitoring() {
 
       {/* 🚀 CHỈ SỐ MÔI TRƯỜNG & AI PREDICT */}
       <div className="space-y-6">
-        <MetricsPanel activeBatch={activeBatch} />
+        <MetricsPanel 
+          activeBatch={activeBatch} 
+          cameraId={selectedCameraId} 
+          hasDetection={cameras.find(c => c.id === selectedCameraId)?.hasDetection || false} 
+        />
       </div>
 
       {/* 🚀 TÍNH NĂNG AI YOLO */}

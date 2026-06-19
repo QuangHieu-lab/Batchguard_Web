@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -18,12 +18,14 @@ import {
   Calendar,
   Crown,
   CheckCircle2,
-  CreditCard
+  Activity
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend, Bar, ComposedChart 
 } from 'recharts';
+import { adminApi } from '../../../services/endpoints';
+import { toast } from 'sonner';
 
 // =========================================================================
 // 🚀 DỮ LIỆU MOCK ĐỘC QUYỀN CHO GÓI PREMIUM 6 THÁNG (Đồng bộ với Mobile)
@@ -44,8 +46,6 @@ const mockPremiumTransactions = [
   { id: 'tx3', user: 'Lê Văn C', email: 'c.le@vietfarm.vn', amount: PREMIUM_PRICE, date: '13/06/2026 16:45', status: 'success' },
   { id: 'tx4', user: 'Phạm Thị D', email: 'd.pham@fresh.com', amount: PREMIUM_PRICE, date: '13/06/2026 10:20', status: 'success' },
   { id: 'tx5', user: 'Hoàng Văn E', email: 'e.hoang@eco.vn', amount: PREMIUM_PRICE, date: '12/06/2026 14:00', status: 'success' },
-  { id: 'tx6', user: 'Lý Thị F', email: 'f.ly@gmail.com', amount: PREMIUM_PRICE, date: '12/06/2026 09:15', status: 'success' },
-  { id: 'tx7', user: 'Vũ Văn G', email: 'g.vu@nongnghiep.vn', amount: PREMIUM_PRICE, date: '11/06/2026 15:30', status: 'success' },
 ];
 
 const mockDailyRevenue = [
@@ -76,17 +76,75 @@ const mockYearOverYearRevenue = [
   { month: 'Jun', monthNumber: 6, currentYear: PREMIUM_PRICE * 115, previousYear: PREMIUM_PRICE * 60, subs2026: 115, subs2025: 60, growth: 91.7 },
 ];
 
-const yearOverYearSummary = {
-  totalRevenue2026: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.currentYear, 0),
-  ytdRevenue2025: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.previousYear, 0),
-  totalSubs2026: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.subs2026, 0),
-  ytdSubs2025: mockYearOverYearRevenue.reduce((acc, curr) => acc + curr.subs2025, 0),
-  get ytdGrowth() { return ((this.totalRevenue2026 / this.ytdRevenue2025) - 1) * 100 }
-};
-
 export default function Revenue() {
   const [period, setPeriod] = useState<'7days' | '30days'>('7days');
-  const revenueData = period === '7days' ? mockDailyRevenue : mockMonthlyRevenue;
+  const [loading, setLoading] = useState(true);
+  
+  const [metrics, setMetrics] = useState(mockPremiumMetrics);
+  const [transactions, setTransactions] = useState<any[]>(mockPremiumTransactions);
+  const [dailyRevenue, setDailyRevenue] = useState(mockDailyRevenue);
+  const [monthlyRevenue, setMonthlyRevenue] = useState(mockMonthlyRevenue);
+  const [yoyRevenue, setYoyRevenue] = useState(mockYearOverYearRevenue);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // 🚀 CẬP NHẬT 1: Fetch Lịch sử giao dịch thật
+        try {
+          const subsRes: any = await adminApi.getSubscriptions();
+          const subsData = subsRes?.data || subsRes;
+          if (subsData && Array.isArray(subsData) && subsData.length > 0) {
+            const mappedTxs = subsData.map((s: any) => ({
+              id: s.id,
+              user: s.user_name || 'Khách hàng', // Dựa vào API có thể trả về user_id, fallback chữ Khách hàng
+              email: s.package_name || '', // Map package_name vào cột email theo cấu trúc của bạn
+              amount: s.amount || PREMIUM_PRICE,
+              date: new Date(s.transaction_time || new Date()).toLocaleString('vi-VN'),
+              status: s.payment_status || 'success'
+            }));
+            setTransactions(mappedTxs);
+          }
+        } catch(e) {
+          console.log("Dùng mock data cho subscriptions");
+        }
+
+        // 🚀 CẬP NHẬT 2: Fetch Thống kê Doanh thu thật
+        try {
+          const statsRes: any = await adminApi.getRevenueStatistics();
+          const statsData = statsRes?.data || statsRes;
+          
+          if (statsData) {
+            // API trả về { today: 500000, month: 15000000, year: 120000000 }
+            // Cập nhật đè lên metrics hiện tại, giữ lại week/growth/totalSubscribers vì API chưa có
+            setMetrics(prev => ({
+              ...prev,
+              today: statsData.today !== undefined ? statsData.today : prev.today,
+              month: statsData.month !== undefined ? statsData.month : prev.month,
+            }));
+          }
+        } catch(e) {
+          console.log("Dùng mock data cho revenue statistics");
+        }
+      } catch (error) {
+        toast.error("Lỗi tải doanh thu, đang hiển thị dữ liệu dự phòng");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const revenueDataChart = period === '7days' ? dailyRevenue : monthlyRevenue;
+
+  const yearOverYearSummary = {
+    totalRevenue2026: yoyRevenue.reduce((acc, curr) => acc + curr.currentYear, 0),
+    ytdRevenue2025: yoyRevenue.reduce((acc, curr) => acc + curr.previousYear, 0),
+    totalSubs2026: yoyRevenue.reduce((acc, curr) => acc + curr.subs2026, 0),
+    ytdSubs2025: yoyRevenue.reduce((acc, curr) => acc + curr.subs2025, 0),
+    get ytdGrowth() { return ((this.totalRevenue2026 / this.ytdRevenue2025) - 1) * 100 }
+  };
 
   // Format Helpers
   const formatCurrency = (value: number) => {
@@ -101,6 +159,13 @@ export default function Revenue() {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
     return `${(value / 1000).toFixed(0)}K`;
   };
+
+  if (loading) {
+     return <div className="p-8 text-slate-400 flex flex-col items-center justify-center h-64">
+        <Activity className="w-8 h-8 animate-spin mb-4 text-amber-500" />
+        Đang tải dữ liệu doanh thu...
+     </div>;
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -120,11 +185,11 @@ export default function Revenue() {
               <div>
                 <p className="text-sm text-slate-400">Doanh thu hôm nay</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(mockPremiumMetrics.today)}
+                  {formatShortCurrency(metrics.today)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
                   <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.today}%</span>
+                  <span className="text-emerald-400">+{metrics.growth.today}%</span>
                   <span className="text-slate-500">vs hôm qua</span>
                 </div>
               </div>
@@ -141,11 +206,11 @@ export default function Revenue() {
               <div>
                 <p className="text-sm text-slate-400">Doanh thu tuần này</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(mockPremiumMetrics.week)}
+                  {formatShortCurrency(metrics.week)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
                   <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.week}%</span>
+                  <span className="text-emerald-400">+{metrics.growth.week}%</span>
                   <span className="text-slate-500">vs tuần trước</span>
                 </div>
               </div>
@@ -162,11 +227,11 @@ export default function Revenue() {
               <div>
                 <p className="text-sm text-slate-400">Doanh thu tháng này</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {formatShortCurrency(mockPremiumMetrics.month)}
+                  {formatShortCurrency(metrics.month)}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
                   <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">+{mockPremiumMetrics.growth.month}%</span>
+                  <span className="text-emerald-400">+{metrics.growth.month}%</span>
                   <span className="text-slate-500">vs tháng trước</span>
                 </div>
               </div>
@@ -183,7 +248,7 @@ export default function Revenue() {
               <div>
                 <p className="text-sm text-slate-400">Tổng KH Premium</p>
                 <h3 className="text-2xl font-bold text-white mt-2">
-                  {mockPremiumMetrics.totalSubscribers}
+                  {metrics.totalSubscribers}
                 </h3>
                 <div className="flex items-center gap-1 mt-2 text-sm">
                   <span className="text-amber-400 font-medium">Người dùng đang Active</span>
@@ -224,7 +289,7 @@ export default function Revenue() {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={350}>
-            <LineChart data={revenueData}>
+            <LineChart data={revenueDataChart}>
               <defs>
                 <linearGradient id="revenueChartGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3} key="stop1"/>
@@ -289,7 +354,7 @@ export default function Revenue() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockPremiumTransactions.map((tx) => (
+                {transactions.map((tx) => (
                   <TableRow key={tx.id} className="border-slate-800 hover:bg-slate-800/50">
                     <TableCell className="font-medium text-white">{tx.user}</TableCell>
                     <TableCell className="text-slate-400">{tx.email}</TableCell>
@@ -302,7 +367,7 @@ export default function Revenue() {
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-emerald-400">
                         <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-sm">Thành công</span>
+                        <span className="text-sm">{tx.status === 'success' || tx.status === 'paid' ? 'Thành công' : tx.status}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-slate-400 text-sm">{tx.date}</TableCell>
@@ -371,7 +436,7 @@ export default function Revenue() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={400}>
-              <ComposedChart data={mockYearOverYearRevenue}>
+              <ComposedChart data={yoyRevenue}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis 
                   dataKey="month" 
@@ -447,7 +512,7 @@ export default function Revenue() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockYearOverYearRevenue.map((item) => {
+                  {yoyRevenue.map((item) => {
                     const difference = item.currentYear - item.previousYear;
                     
                     return (

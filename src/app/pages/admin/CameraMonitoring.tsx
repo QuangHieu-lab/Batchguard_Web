@@ -1,19 +1,46 @@
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Camera, Wifi, WifiOff, Activity, RefreshCcw } from 'lucide-react';
-import { mockCameras } from '../../data/adminMockData';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 import { FarmSelector } from '../../components/admin/FarmSelector';
 import { useFarm } from '../../contexts/FarmContext';
+import { cameraApi } from '../../..//services/endpoints';
+import { toast } from 'sonner';
 
 export default function CameraMonitoring() {
   const { selectedFarmId } = useFarm();
+  const [cameras, setCameras] = useState<any[]>([]);
+
+  const fetchCameras = async () => {
+    try {
+      const data: any = await cameraApi.getAll();
+      const formattedCameras = data.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        location: c.location,
+        status: 'online', // default to online for now
+        farmId: 'FARM-01', // mock farmId as API doesn't have it
+        imageUrl: '',
+        activeBatches: Math.floor(Math.random() * 3), // simulate active batches
+        lastUpdate: c.created_at || new Date().toISOString()
+      }));
+      setCameras(formattedCameras);
+    } catch (error) {
+      console.error('Lỗi tải danh sách camera:', error);
+      toast.error('Không thể tải danh sách camera');
+    }
+  };
+
+  useEffect(() => {
+    fetchCameras();
+  }, []);
   
   // Filter cameras by selected farm
   const filteredCameras = selectedFarmId 
-    ? mockCameras.filter(c => c.farmId === selectedFarmId)
-    : mockCameras;
+    ? cameras.filter(c => c.farmId === selectedFarmId)
+    : cameras;
 
   const onlineCameras = filteredCameras.filter(c => c.status === 'online').length;
   const offlineCameras = filteredCameras.filter(c => c.status === 'offline').length;
@@ -28,7 +55,7 @@ export default function CameraMonitoring() {
         </div>
         <div className="flex gap-3">
           <FarmSelector />
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={fetchCameras}>
             <RefreshCcw className="w-4 h-4 mr-2" />
             Làm mới
           </Button>

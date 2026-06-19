@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Waves
 } from 'lucide-react';
+import { notificationApi } from '../../services/endpoints';
 
 interface VoiceAlert {
   id: string;
@@ -33,102 +34,56 @@ export default function VoiceAlerts() {
   const { activeBatch } = useSystem();
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [volume, setVolume] = useState(80);
-  const [alerts, setAlerts] = useState<VoiceAlert[]>([
-    {
-      id: '1',
-      time: '15:30',
-      message: 'Độ ẩm tăng cao lên 68%, cân nhắc thu bánh trong 30 phút tới.',
-      type: 'warning',
-      played: true,
-      priority: 'high',
-    },
-    {
-      id: '2',
-      time: '16:00',
-      message: 'Nguy cơ mưa trong 30 phút tới, khả năng 75%.',
-      type: 'critical',
-      played: true,
-      priority: 'high',
-    },
-    {
-      id: '3',
-      time: '14:15',
-      message: 'Dryness đạt 60%, tiến độ tốt, dự kiến hoàn thành đúng giờ.',
-      type: 'info',
-      played: true,
-      priority: 'medium',
-    },
-    {
-      id: '4',
-      time: '13:45',
-      message: 'Nhiệt độ ổn định ở 32 độ C, điều kiện phơi lý tưởng.',
-      type: 'success',
-      played: true,
-      priority: 'low',
-    },
-  ]);
-
+  const [alerts, setAlerts] = useState<VoiceAlert[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Simulate new alerts
+  // Fetch real notifications from API
   useEffect(() => {
-    if (!activeBatch || !voiceEnabled) return;
-
-    const alertInterval = setInterval(() => {
-      const dryness = Math.round(activeBatch.dryness);
-      const humidity = Math.round(activeBatch.humidity);
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-      // Generate alerts based on conditions
-      if (humidity > 70 && Math.random() > 0.7) {
-        const newAlert: VoiceAlert = {
-          id: Date.now().toString(),
-          time: timeStr,
-          message: `Cảnh báo: Độ ẩm đạt ${humidity}%, khuyến nghị thu bánh sớm.`,
-          type: 'critical',
-          played: false,
-          priority: 'high',
-        };
+    let isMounted = true;
+    
+    const fetchNotifications = async () => {
+      try {
+        // Gọi API thật, giả sử ID user là 'me' hoặc tuỳ ý theo API thiết kế
+        const res: any = await notificationApi.getByUserId('me');
+        const data = res?.data || res;
         
-        setAlerts(prev => [newAlert, ...prev]);
-        
-        // Simulate playing alert
-        if (voiceEnabled) {
-          setIsPlaying(true);
-          setTimeout(() => {
-            setIsPlaying(false);
-            setAlerts(prev => prev.map(a => 
-              a.id === newAlert.id ? { ...a, played: true } : a
-            ));
-          }, 3000);
+        if (data && Array.isArray(data)) {
+          const mappedAlerts = data.map((n: any) => ({
+            id: n.id || String(Math.random()),
+            time: n.created_at ? new Date(n.created_at).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : 'Vừa xong',
+            message: n.content || n.message || 'Có thông báo mới',
+            type: n.type || 'info', // warning, info, critical, success
+            played: n.is_read || true,
+            priority: n.priority || 'medium',
+          }));
+          
+          if (isMounted) {
+            setAlerts(mappedAlerts);
+          }
         }
-      } else if (dryness % 25 === 0 && dryness > 0 && Math.random() > 0.8) {
-        const newAlert: VoiceAlert = {
-          id: Date.now().toString(),
-          time: timeStr,
-          message: `Dryness đạt ${dryness}%, ${dryness >= 75 ? 'sắp hoàn thành' : 'tiến độ tốt'}.`,
-          type: dryness >= 75 ? 'success' : 'info',
-          played: false,
-          priority: dryness >= 75 ? 'high' : 'medium',
-        };
-        
-        setAlerts(prev => [newAlert, ...prev.slice(0, 9)]);
-        
-        if (voiceEnabled) {
-          setIsPlaying(true);
-          setTimeout(() => {
-            setIsPlaying(false);
-            setAlerts(prev => prev.map(a => 
-              a.id === newAlert.id ? { ...a, played: true } : a
-            ));
-          }, 2500);
+      } catch (error) {
+        console.log("Lỗi hoặc không có API thông báo, dùng dữ liệu mẫu...");
+        // Fallback data
+        if (isMounted && alerts.length === 0) {
+          setAlerts([
+            { id: '1', time: '15:30', message: 'Độ ẩm tăng cao lên 68%, cân nhắc thu bánh trong 30 phút tới.', type: 'warning', played: true, priority: 'high' },
+            { id: '2', time: '16:00', message: 'Nguy cơ mưa trong 30 phút tới, khả năng 75%.', type: 'critical', played: true, priority: 'high' },
+          ]);
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    }, 15000);
+    };
 
-    return () => clearInterval(alertInterval);
-  }, [activeBatch, voiceEnabled]);
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000); // Polling mỗi 15s để lấy thông báo mới
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []); // Remove alerts.length to avoid infinite reset
 
   const getAlertIcon = (type: string) => {
     switch (type) {

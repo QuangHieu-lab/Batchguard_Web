@@ -8,7 +8,7 @@ const BASE_URL =  (import.meta as any).env.VITE_WEATHER_BASE_URL || 'https://myl
 // =======================================================
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000, // Tự động hủy nếu API phản hồi quá 15 giây
+  timeout: 60000, // Tự động hủy nếu API phản hồi quá 15 giây
   headers: {
     'Content-Type': 'application/json',
   },
@@ -19,13 +19,10 @@ export const apiClient = axios.create({
 // =======================================================
 apiClient.interceptors.request.use(
   (config) => {
-    // 💡 Nếu dự án có đăng nhập, bạn mở comment đoạn dưới để tự động nhét Token vào mọi API
-    /*
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    */
     return config;
   },
   (error) => {
@@ -45,10 +42,12 @@ apiClient.interceptors.response.use(
     // Bắt và in lỗi rõ ràng ra console để dễ Debug
     console.error('🔥 Lỗi Axios:', error.response?.data || error.message);
     
-    // Nếu token hết hạn (401), có thể viết logic tự động Logout hoặc Refresh Token ở đây
+    // Nếu token hết hạn (401), tự động xóa token và đẩy về login
     if (error.response?.status === 401) {
       console.warn("Token hết hạn hoặc không hợp lệ!");
-      // window.location.href = '/login'; 
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('mylongai_user');
+      window.location.href = '/login'; 
     }
 
     return Promise.reject(error);
