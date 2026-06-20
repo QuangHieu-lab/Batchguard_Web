@@ -1,16 +1,15 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, History, Settings, Sparkles, LogOut, User, Camera, Cloud, Volume2 } from 'lucide-react';
+import { BarChart3, Sparkles, Camera, Cloud, Volume2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { SystemStatus } from '../components/SystemStatus';
 import { WelcomeNotification } from '../components/WelcomeNotification';
 import { useAuth } from '../contexts/AuthContext';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '../components/ui/avatar';
 
 export default function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const navItems = [
     { path: '/dashboard/camera', icon: Camera, label: 'Camera quan sát', exact: true },
@@ -23,11 +22,6 @@ export default function DashboardLayout() {
       return location.pathname === path;
     }
     return location.pathname.startsWith(path);
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
   };
 
   const getUserInitials = (name: string) => {
@@ -76,38 +70,21 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-4">
             <SystemStatus />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-3 hover:bg-slate-800 border border-slate-700 rounded-xl px-3 py-2">
-                  <Avatar className="w-8 h-8 border-2 border-sky-400">
-                    <AvatarFallback className="bg-gradient-to-br from-sky-400 to-cyan-400 text-navy-950 font-bold text-sm">
-                      {user ? getUserInitials(user.name) : 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium text-white hidden md:block">{user?.name}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-slate-800 border-slate-700 text-slate-100">
-                <DropdownMenuLabel className="text-slate-300">Tài khoản</DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-slate-700" />
-                <DropdownMenuItem className="focus:bg-slate-700 focus:text-white cursor-pointer">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Thông tin</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="focus:bg-slate-700 focus:text-white cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Cài đặt</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-slate-700" />
-                <DropdownMenuItem 
-                  onClick={handleLogout}
-                  className="focus:bg-red-900/50 focus:text-red-400 cursor-pointer text-red-400"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Đăng xuất</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            
+            {/* 🚀 AVATAR ĐÃ ĐƯỢC CHUYỂN THÀNH NÚT ĐIỀU HƯỚNG TRỰC TIẾP */}
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate('/dashboard/userprofile')}
+              className="flex items-center gap-3 hover:bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 cursor-pointer transition-all hover:border-sky-500/50"
+            >
+              <Avatar className="w-8 h-8 border-2 border-sky-400">
+                <AvatarFallback className="bg-gradient-to-br from-sky-400 to-cyan-400 text-navy-950 font-bold text-sm">
+                  {user ? getUserInitials(user.name) : 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium text-white hidden md:block">{user?.name}</span>
+            </Button>
+            
           </div>
         </div>
 

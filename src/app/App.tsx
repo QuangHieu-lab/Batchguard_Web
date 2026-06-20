@@ -22,6 +22,7 @@ import WeatherAlert from './pages/WeatherAlert';
 // 🚀 THÊM IMPORT CHO 2 TRANG MỚI TẠO TẠI ĐÂY
 import AiPerformance from './pages/admin/AiPerformance';
 import DryingCycles from './pages/admin/DryingCycles';
+import UserProfile from './pages/UserProfile';
 
 const router = createBrowserRouter([
   {
@@ -67,6 +68,10 @@ const router = createBrowserRouter([
             path: 'history',
             element: <History />,
           },
+          {
+            path:'userprofile',
+            element:<UserProfile/>
+          }
         ],
       },
       {
