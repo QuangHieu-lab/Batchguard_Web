@@ -4,8 +4,6 @@ import {
   CheckCircle, ShieldAlert, CloudRain, 
   Activity, Wind, Droplets, RefreshCw
 } from 'lucide-react';
-
-// Giả định bạn cũng có hook useWeather ở bên Web tương tự Mobile
 import { useWeather } from '../hooks/useWeather'; 
 
 export default function WeatherAlertWeb() {
@@ -19,43 +17,57 @@ export default function WeatherAlertWeb() {
 
   // =====================================
   // LOGIC ĐÁNH GIÁ MỨC ĐỘ RỦI RO
-  // (Đã thay đổi cách viết class Tailwind để tương thích an toàn với Web)
   // =====================================
   const getSeverityConfig = () => {
     if (!currentWeather) {
       return { 
         theme: 'emerald', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400',
-        title: 'Đang tải...', icon: Sun, action: 'Chờ dữ liệu AI...' 
+        title: 'Đang tải...', icon: Sun, action: 'Chờ dữ liệu AI...', desc: 'Đang phân tích...'
       };
     }
     
+    // NGUY HIỂM: Đang mưa hoặc khả năng mưa > 60%
     if (currentWeather.isRaining || currentWeather.rainChance > 60) {
       return { 
         theme: 'red', bg: 'bg-red-500/10', border: 'border-red-500/40', text: 'text-red-500',
         title: 'NGUY HIỂM: CÓ MƯA!', icon: CloudLightning, 
-        action: 'KÍCH HOẠT THU BÁNH KHẨN CẤP' 
+        action: 'KÍCH HOẠT THU BÁNH KHẨN CẤP',
+        desc: `Khả năng mưa cực cao (${currentWeather.rainChance}%)` 
       };
     }
     
-    if (currentWeather.rainChance > 30 || currentWeather.humidity > 75) {
+    // CẢNH BÁO: Khả năng mưa > 30%
+    if (currentWeather.rainChance > 30) {
       return { 
         theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
         title: 'CẢNH BÁO RỦI RO', icon: AlertTriangle, 
-        action: 'CHUẨN BỊ KÉO BẠT / THU BÁNH' 
+        action: 'CHUẨN BỊ KÉO BẠT / THU BÁNH',
+        desc: `Có nguy cơ mưa rào (${currentWeather.rainChance}%)`
+      };
+    }
+
+    // CHÚ Ý: Độ ẩm quá cao (nhưng không mưa)
+    if (currentWeather.humidity > 75) {
+      return { 
+        theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
+        title: 'LƯU Ý ĐỘ ẨM CAO', icon: Droplets, 
+        action: 'ĐẢM BẢO THÔNG GIÓ',
+        desc: `Độ ẩm ${currentWeather.humidity}%, bánh lâu khô`
       };
     }
     
+    // AN TOÀN
     return { 
       theme: 'emerald', bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-500',
       title: 'ĐIỀU KIỆN AN TOÀN', icon: CheckCircle, 
-      action: 'TIẾP TỤC PHƠI BÌNH THƯỜNG' 
+      action: 'TIẾP TỤC PHƠI BÌNH THƯỜNG',
+      desc: 'Ít khả năng mưa, thời tiết thuận lợi' 
     };
   };
 
   const severity = getSeverityConfig();
   const StatusIcon = severity.icon;
 
-  // Xử lý trạng thái Loading / Error
   if (loading && !isRefreshing && !currentWeather) {
     return <div className="p-8 text-center text-slate-400 animate-pulse">AI đang phân tích môi trường...</div>;
   }
@@ -91,7 +103,7 @@ export default function WeatherAlertWeb() {
       <div className="p-6">
         {currentWeather && (
           <>
-            {/* ================= BANNER CẢNH BÁO CHÍNH (WEB LÀM RỘNG HƠN) ================= */}
+            {/* ================= BANNER CẢNH BÁO CHÍNH ================= */}
             <div className={`w-full p-8 rounded-2xl border mb-6 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-lg ${severity.bg} ${severity.border}`}>
               
               {/* Hiệu ứng nhấp nháy nếu mưa */}
@@ -107,8 +119,9 @@ export default function WeatherAlertWeb() {
                   <h3 className={`text-3xl font-black uppercase tracking-tight ${severity.text}`}>
                     {severity.title}
                   </h3>
+                  {/* 🚀 ĐÃ SỬA: Hiển thị mô tả động dựa trên điều kiện thời tiết thực tế */}
                   <p className="text-slate-300 font-medium mt-1">
-                    {currentWeather.condition || "Đang phân tích..."}
+                    {severity.desc}
                   </p>
                 </div>
               </div>
@@ -122,7 +135,7 @@ export default function WeatherAlertWeb() {
               </div>
             </div>
 
-            {/* ================= LƯỚI THÔNG SỐ (GRID CHIA 3 CỘT TRÊN WEB) ================= */}
+            {/* ================= LƯỚI THÔNG SỐ ================= */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               
               {/* Card 1: Khả năng mưa */}
