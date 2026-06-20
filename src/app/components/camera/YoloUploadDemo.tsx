@@ -2,8 +2,7 @@ import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Upload, Scan, Tag, Crosshair, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner'; // Thêm thư viện thông báo
-import { detectionApi } from '../../../services/endpoints'; // Đảm bảo đường dẫn này trỏ đúng file endpoints.ts của bạn
+import { toast } from 'sonner';
 
 interface YoloUploadDemoProps {}
 
@@ -75,7 +74,7 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
   } | null>(null);
 
   // ==========================================
-  // 3. XỬ LÝ UPLOAD VÀ GỌI API (YOLO + DATABASE)
+  // 3. XỬ LÝ UPLOAD VÀ GỌI API YOLO
   // ==========================================
   const handleYoloUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const originalFile = e.target.files?.[0];
@@ -131,31 +130,9 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
       
       // Hiển thị kết quả lên màn hình
       setYoloResult({ count: detectedCount, detections, imageUrl });
-
-      // -------------------------------------------------------------
-      // 🚀 BƯỚC MỚI: LƯU VÀO DATABASE ĐỂ HIỆN LÊN ADMIN DASHBOARD
-      // -------------------------------------------------------------
+      
       if (detectedCount > 0) {
-        // Tính độ tin cậy trung bình của bức ảnh này
-     const totalConf = detections.reduce((sum: number, item: any) => sum + item.confidence, 0);
-        let avgConfidence = totalConf / detectedCount;
-        
-        // Nếu Python trả về confidence dạng 95 thay vì 0.95 thì chia 100 để lưu DB cho chuẩn logic chung
-        if (avgConfidence > 1) {
-          avgConfidence = avgConfidence / 100;
-        }
-
-        try {
-          await detectionApi.create({
-            camera_id: "demo-upload-camera-001", // Dùng ID tạm vì đây là upload thủ công
-            detected_count: detectedCount,
-            confidence: Number(avgConfidence.toFixed(4)) // Làm tròn 4 chữ số thập phân
-          });
-          toast.success('Đã lưu kết quả quét ảnh vào hệ thống Dashboard!');
-        } catch (dbError) {
-          console.error("Lỗi khi lưu vào DB:", dbError);
-          // Ta chỉ in lỗi chứ không throw, để không làm sập giao diện hiển thị ảnh của người dùng
-        }
+        toast.success(`Đã phân tích xong! Phát hiện ${detectedCount} đối tượng.`);
       }
       
     } catch (err: any) {
