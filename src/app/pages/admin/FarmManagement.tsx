@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Home, Wifi, Camera, Settings, X, PlayCircle, User, MapPin } from 'lucide-react';
+import { ChevronLeft, Wifi, Camera, Settings, X, PlayCircle, User, MapPin } from 'lucide-react';
 import { cameraApi, userApi } from '../../../services/endpoints';
 import { toast } from 'sonner';
 
@@ -19,33 +19,44 @@ export default function HouseholdsWebScreen() {
       const usersData = usersRes?.data || usersRes || [];
       const camerasData = camerasRes?.data || camerasRes || [];
 
-      // 1. Lọc ra các tài khoản là Khách hàng
-      const customers = usersData.filter((u: any) => u.role !== 'admin');
-
-      // 2. Map dữ liệu Camera vào Tài khoản (Chờ Backend bổ sung user_id vào API Camera)
-      const mappedAccounts = customers.map((user: any) => {
-        // ⚠️ Lưu ý: Đoạn này đang chờ Backend trả về cam.user_id
-        const userCameras = camerasData.filter((cam: any) => cam.user_id === user.id);
-
-        return {
-          id: user.id,
-          name: user.full_name || user.name || 'Khách hàng',
-          email: user.email, 
-          camerasCount: userCameras.length,
-          sensors: userCameras.length > 0 ? 'Online' : 'Offline',
-          status: user.role === 'disabled' || user.status === 'inactive' ? 'inactive' : 'active',
-          cameraList: userCameras.map((cam: any) => ({
-            id: cam.id,
-            name: cam.name || 'Camera không tên',
-            location: cam.location || 'Chưa cập nhật vị trí',
-            streamUrl: `rtsp://camera-${cam.id}.mylong.vn/live`
-          }))
-        };
+      // 1. Nhóm Camera theo user_id thật từ Backend
+      const userCamerasMap = new Map();
+      camerasData.forEach((cam: any) => {
+        const uid = cam.user_id;
+        if (!uid) return; // Bỏ qua nếu camera lỗi không có user_id
+        
+        if (!userCamerasMap.has(uid)) {
+          userCamerasMap.set(uid, []);
+        }
+        userCamerasMap.get(uid).push(cam);
       });
 
-      // 🚀 SỬA Ở ĐÂY: Hiển thị TẤT CẢ Khách hàng, không giấu đi nữa!
-      // Khi nào Backend trả về user_id, số đếm camera sẽ tự động đúng.
-      setHouseholds(mappedAccounts);
+      const activeHouseholds: any[] = [];
+
+      // 2. Map dữ liệu Camera và User lại với nhau
+      userCamerasMap.forEach((cams, uid) => {
+        // Tìm thông tin User sở hữu nhóm camera này
+        const userInfo = usersData.find((u: any) => u.id === uid);
+
+        activeHouseholds.push({
+          id: uid,
+          name: userInfo ? (userInfo.full_name || userInfo.name) : 'Khách hàng ẩn danh',
+          email: userInfo ? userInfo.email : `ID: ${uid.substring(0, 8)}...`, 
+          camerasCount: cams.length,
+          sensors: cams.length > 0 ? 'Online' : 'Offline',
+          status: userInfo ? (userInfo.role === 'disabled' || userInfo.status === 'inactive' ? 'inactive' : 'active') : 'active',
+          
+          cameraList: cams.map((cam: any) => ({
+            id: cam.id,
+            name: cam.camera_name || cam.name || 'Camera không tên', 
+            location: cam.location || 'Chưa cập nhật vị trí',
+            streamUrl: cam.stream_url || `rtsp://camera-${String(cam.id).substring(0,6)}.mylong.vn/live`,
+            status: cam.status
+          }))
+        });
+      });
+      
+      setHouseholds(activeHouseholds);
       
     } catch (error) {
       console.error(error);
@@ -103,17 +114,14 @@ export default function HouseholdsWebScreen() {
         ) : households.length === 0 ? (
           <div className="text-center py-20 bg-[#151E2F] rounded-[24px] border border-slate-800 border-dashed">
             <User className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 font-medium">Chưa có Khách hàng nào đăng ký hệ thống</p>
+            <p className="text-slate-400 font-medium">Chưa có Khách hàng nào có Camera trên hệ thống</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {households.map(house => (
               <div 
                 key={house.id} 
-                onClick={() => {
-                  if (house.camerasCount > 0) setSelectedHousehold(house);
-                  else toast.info("Khách hàng này chưa tạo camera nào.");
-                }}
+                onClick={() => setSelectedHousehold(house)}
                 className="bg-[#151E2F] p-6 rounded-[24px] border border-slate-800 hover:border-cyan-500/40 transition-all duration-300 shadow-lg hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] group relative cursor-pointer flex flex-col"
               >
                 <div className="flex items-center gap-4 mb-4">
@@ -157,7 +165,7 @@ export default function HouseholdsWebScreen() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 🚀 MODAL XEM CHI TIẾT CAMERA CỦA KHÁCH HÀNG ĐÃ TẠO                        */}
+      {/* 🚀 MODAL XEM CHI TIẾT CAMERA CỦA KHÁCH HÀNG                               */}
       {/* ========================================================================= */}
       {selectedHousehold && selectedHousehold.cameraList && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
