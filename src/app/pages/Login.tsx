@@ -229,35 +229,7 @@ export default function Login() {
         </Card>
 
         {/* Demo Accounts */}
-        <Card className="mt-6 border border-slate-700 bg-slate-800/50 backdrop-blur-xl rounded-2xl">
-          <CardContent className="pt-6">
-            <div className="text-center mb-3">
-              <p className="text-sm font-bold text-sky-400">Demo Accounts</p>
-            </div>
-            <div className="space-y-2 text-xs text-slate-400">
-              <div className="flex justify-between items-center p-2 bg-slate-900/50 rounded-lg">
-                <div>
-                  <p className="text-sky-400 font-bold">Admin:</p>
-                  <p>admin@mylongai.com</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-slate-500">Password:</p>
-                  <p className="text-white font-mono">admin123</p>
-                </div>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-slate-900/50 rounded-lg">
-                <div>
-                  <p className="text-cyan-400 font-bold">Customer:</p>
-                  <p>customer@mylongai.com</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-slate-500">Password:</p>
-                  <p className="text-white font-mono">customer123</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      
 
         {/* Footer Note */}
         <p className="text-center text-sm text-slate-500 mt-6">

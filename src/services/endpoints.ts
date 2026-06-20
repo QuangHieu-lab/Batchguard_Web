@@ -76,4 +76,13 @@ export const userApi = {
   getById: (id: string) => apiClient.get(`/users/${id}`),
   disableUser: (id: string) => apiClient.patch(`/users/${id}/disable`),
   enableUser: (id: string) => apiClient.patch(`/users/${id}/enable`),
+  updateUser: (id: string, data: any) => apiClient.put(`/users/${id}`, data),
+  deleteUser: (id: string) => apiClient.delete(`/users/${id}`),
+};
+export const voiceApi = {
+  getAlert: (level: 'low' | 'medium' | 'high') => 
+    apiClient.get(`/voice/alert`, { 
+      params: { level },
+      responseType: 'blob' // Bắt buộc phải có dòng này để nhận file MP3
+    }),
 };

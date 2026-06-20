@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '../../components/ui/table';
 import { 
-  Search, UserPlus, Shield, User, Activity, UserX, Edit, Trash2, Lock, Unlock, Loader2
+  Search, Shield, User, Activity, UserX, Edit, Trash2, Lock, Unlock, Loader2, X, AlertTriangle
 } from 'lucide-react';
 import { userApi } from '../../../services/endpoints';
 import { toast } from 'sonner';
@@ -23,17 +23,22 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  // States cho tính năng Edit
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ name: '', role: 'customer' });
+
+  // States cho tính năng Delete
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<any>(null);
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const res: any = await userApi.getAll();
       const data = res?.data || res || [];
-      
-      // 🚀 DEBUG: In dữ liệu API ra Console để bắt lỗi Backend
-      console.log("🔥 Dữ liệu Backend trả về từ API /users:", data);
 
       const formattedUsers = data.map((u: any) => {
-        // 🚀 BẮT LƯỚI TẤT CẢ CÁC TRƯỜNG HỢP BACKEND CÓ THỂ TRẢ VỀ
         const isLocked = 
           u.role === 'disabled' || 
           u.status === 'disabled' || 
@@ -48,7 +53,6 @@ export default function UserManagement() {
           id: u.id,
           name: u.full_name || u.name || 'Người dùng ẩn danh',
           email: u.email || '',
-          // Giữ nguyên role hiển thị nếu không phải admin
           role: u.role === 'admin' ? 'admin' : 'customer', 
           status: isLocked ? 'inactive' : 'active',
           lastLogin: u.last_login || u.created_at || new Date().toISOString()
@@ -83,16 +87,78 @@ export default function UserManagement() {
         toast.success('Đã mở khóa tài khoản thành công');
       }
       
-      // Đợi nửa giây để DB Backend kịp lưu rồi mới fetch lại
       setTimeout(async () => {
         await fetchUsers();
       }, 500);
 
     } catch (error: any) {
-      console.error("LỖI KHÓA/MỞ KHÓA TÀI KHOẢN:", error);
-      // Bắt chính xác câu lỗi từ Backend để hiển thị (400, 403, 500)
-      const errorMessage = error?.message || error?.detail || error?.error || 'Có lỗi từ máy chủ';
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Có lỗi từ máy chủ';
       toast.error(`Thất bại: ${errorMessage}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // ==========================================
+  // 🚀 XỬ LÝ SỬA NGƯỜI DÙNG CHUẨN
+  // ==========================================
+  const openEditModal = (user: any) => {
+    setEditingUser(user);
+    setEditForm({ name: user.name, role: user.role });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setProcessingId(editingUser.id);
+      
+      // Gọi API Sửa chuẩn (Đã xóa chữ 'any' vì bạn đã khai báo trong endpoints)
+      // Truyền cả name và full_name để Backend bắt trúng biến
+      await (userApi as any).updateUser(editingUser.id, {
+        name: editForm.name,
+        full_name: editForm.name,
+        role: editForm.role
+      });
+      
+      toast.success('Cập nhật thông tin thành công');
+      setIsEditModalOpen(false);
+      fetchUsers(); // Tải lại danh sách mới
+    } catch (error: any) {
+      console.error("LỖI CẬP NHẬT USER:", error);
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Không thể cập nhật thông tin';
+      toast.error(`Lỗi: ${errorMessage}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // ==========================================
+  // 🚀 XỬ LÝ XÓA NGƯỜI DÙNG CHUẨN
+  // ==========================================
+  const openDeleteModal = (user: any) => {
+    if (user.role === 'admin') {
+      toast.error('Không thể xóa tài khoản Quản trị viên!');
+      return;
+    }
+    setDeletingUser(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteUser = async () => {
+    try {
+      setProcessingId(deletingUser.id);
+      
+      // Gọi API Xóa chuẩn
+      await (userApi as any).deleteUser(deletingUser.id);
+      
+      toast.success('Đã xóa người dùng khỏi hệ thống');
+      setIsDeleteModalOpen(false);
+      fetchUsers(); // Tải lại danh sách mới
+    } catch (error: any) {
+      console.error("LỖI XÓA USER:", error);
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Không thể xóa người dùng này';
+      toast.error(`Lỗi: ${errorMessage}`);
     } finally {
       setProcessingId(null);
     }
@@ -108,17 +174,13 @@ export default function UserManagement() {
   const adminUsers = users.filter(u => u.role === 'admin').length;
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-8 space-y-6 relative">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Quản lý người dùng</h1>
           <p className="text-slate-400 mt-1">Quản lý tài khoản, phân quyền và trạng thái đăng nhập</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          <UserPlus className="w-4 h-4 mr-2" />
-          Thêm người dùng
-        </Button>
       </div>
 
       {/* Stats */}
@@ -255,10 +317,19 @@ export default function UserManagement() {
                           >
                             {processingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10">
+                          <Button 
+                            variant="ghost" size="sm" 
+                            onClick={() => openEditModal(user)}
+                            className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                          >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                          <Button 
+                            variant="ghost" size="sm" 
+                            disabled={user.role === 'admin'}
+                            onClick={() => openDeleteModal(user)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -271,6 +342,81 @@ export default function UserManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ================= MODAL SỬA NGƯỜI DÙNG ================= */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0B1121] border border-slate-700 w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-slate-800">
+              <h2 className="text-xl font-bold text-white">Chỉnh sửa thông tin</h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Email (Chỉ xem)</label>
+                <Input value={editingUser?.email} disabled className="bg-slate-800/50 border-slate-700 text-slate-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Họ tên</label>
+                <Input 
+                  value={editForm.name} 
+                  onChange={(e) => setEditForm({...editForm, name: e.target.value})} 
+                  className="bg-[#151E2F] border-slate-700 text-white" 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Phân quyền</label>
+                <select 
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({...editForm, role: e.target.value})}
+                  className="w-full bg-[#151E2F] border border-slate-700 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                >
+                  <option value="customer">Khách hàng</option>
+                  <option value="admin">Quản trị viên (Admin)</option>
+                </select>
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <Button type="button" variant="ghost" onClick={() => setIsEditModalOpen(false)} className="text-slate-300 hover:text-white hover:bg-slate-800">
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={processingId === editingUser?.id} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {processingId === editingUser?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Lưu thay đổi
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL XÓA NGƯỜI DÙNG ================= */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0B1121] border border-rose-900/50 w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-rose-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Xóa người dùng?</h2>
+              <p className="text-slate-400">
+                Bạn có chắc chắn muốn xóa tài khoản <span className="font-bold text-white">{deletingUser?.name}</span> vĩnh viễn? Hành động này không thể hoàn tác.
+              </p>
+              <div className="pt-4 flex justify-center gap-3">
+                <Button type="button" variant="ghost" onClick={() => setIsDeleteModalOpen(false)} className="text-slate-300 hover:text-white hover:bg-slate-800 w-full">
+                  Hủy
+                </Button>
+                <Button type="button" onClick={handleDeleteUser} disabled={processingId === deletingUser?.id} className="bg-rose-600 hover:bg-rose-700 text-white w-full">
+                  {processingId === deletingUser?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Xác nhận xóa
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
