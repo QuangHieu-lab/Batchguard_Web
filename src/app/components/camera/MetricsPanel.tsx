@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Thermometer, Droplets, TrendingUp, Clock, Activity, CloudRain } from 'lucide-react';
+import { Thermometer, Droplets, TrendingUp, Clock, Activity, CloudRain, Badge } from 'lucide-react';
 import type { Batch } from '../../contexts/SystemContext';
 import { predictionApi, sensorApi } from '../../../services/endpoints';
 
@@ -15,6 +15,13 @@ interface MetricsPanelProps {
 export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: MetricsPanelProps) {
   const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
   const [predictionData, setPredictionData] = useState({ dryness: 0, minutesLeft: 0 });
+
+  // 🚀 BIẾN ÉP BẬT CHẾ ĐỘ DEMO CHO VIDEO TEST
+  const IS_DEMO_MODE = true; 
+  const showPredictionUI = hasDetection || IS_DEMO_MODE;
+
+  // 🚀 THÊM DÒNG NÀY: Lưu lại thời điểm bắt đầu bật Camera để làm mốc đếm ngược
+  const demoStartTime = useRef(Date.now());
 
   useEffect(() => {
     let isMounted = true;
@@ -63,13 +70,13 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             currentHum = sData.humidity;
           }
         } catch (e) { 
-          // Không log lỗi để tránh rác console vì camera mới thường chưa có sensor
+          // Không log lỗi để tránh rác console
         }
 
         // ========================================================
-        // 3. NẾU CÓ BÁNH TRÁNG -> LẤY DỮ LIỆU DỰ ĐOÁN
+        // 3. TÍNH TOÁN DỮ LIỆU DỰ ĐOÁN (Chạy cả khi Demo)
         // ========================================================
-        if (hasDetection) {
+        if (showPredictionUI) {
           try {
             const predRes: any = await predictionApi.getLatest(cameraId);
             const pData = predRes?.data || predRes;
@@ -80,16 +87,30 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                 ? pData.dryness_percentage 
                 : Math.max(0, Math.min(100, 100 - ((realMinutesLeft / 120) * 100)));
             } else {
-              throw new Error("Chưa có data prediction"); // Ném lỗi để chạy xuống phần Fallback tính toán ảo
+              throw new Error("Chưa có data prediction"); 
             }
           } catch (e) {
-            // TỰ ĐỘNG TÍNH TOÁN (FALLBACK) NẾU BACKEND CHƯA CÓ DỮ LIỆU
-            // Công thức vật lý giả lập: 120 phút chuẩn. Nóng hơn 30 độ -> giảm phút, Ẩm hơn 60% -> tăng phút.
-            let estimatedMins = 120 - ((currentTemp - 30) * 5) + ((currentHum - 60) * 2);
-            realMinutesLeft = Math.max(30, Math.min(estimatedMins, 300)); // Cắt giới hạn từ 30 -> 300 phút
+            // 🚀 TỰ ĐỘNG TÍNH TOÁN (FALLBACK) CHO DEMO
+            // Tạo số liệu giả lập nếu Cảm biến đang là 0 để demo sinh động
+            const demoTemp = currentTemp > 0 ? currentTemp : 32.5;
+            const demoHum = currentHum > 0 ? currentHum : 65;
+
+            // 1. Tính toán tổng số phút gốc cần thiết dựa trên thời tiết
+            let baseMins = 120 - ((demoTemp - 30) * 5) + ((demoHum - 60) * 2);
+            baseMins = Math.max(30, Math.min(baseMins, 300)); 
+
+            // 2. Tính số phút đã trôi qua kể từ lúc bật Camera
+            const elapsedMins = (Date.now() - demoStartTime.current) / 60000;
+
+            // 3. Số phút còn lại = Tổng phút - Phút đã trôi (Tạo hiệu ứng đếm ngược thật)
+            realMinutesLeft = Math.max(0, baseMins - elapsedMins); 
             
-            realDryness = 100 - ((realMinutesLeft / 120) * 100);
-            realDryness = Math.max(0, Math.min(100, realDryness)); // Giới hạn 0 - 100%
+            // 4. Tính phần trăm độ khô
+            realDryness = 100 - ((realMinutesLeft / baseMins) * 100);
+            
+            // Thêm một chút dao động (random nhẹ) để thanh tiến độ nhìn "Real-time" và giống AI đang chạy hơn
+            const randomFluctuation = (Math.random() * 1.5) - 0.75; 
+            realDryness = Math.max(0, Math.min(100, realDryness + randomFluctuation)); 
           }
         }
 
@@ -104,21 +125,20 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
     };
 
     fetchRealtimeData();
-    // Tăng tốc độ tự làm mới (Polling) lên mỗi 10 giây để UI cập nhật nhạy hơn khi AI vừa quét xong
-    const interval = setInterval(fetchRealtimeData, 10000); 
+    const interval = setInterval(fetchRealtimeData, 5000); // 🚀 Tăng tốc độ render demo lên 5s
     
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [cameraId, hasDetection]); 
+  }, [cameraId, showPredictionUI]); 
 
   const estimatedCompletion = new Date(Date.now() + predictionData.minutesLeft * 60000);
 
   // Giao diện khi chưa chọn Camera
   if (!cameraId && !activeBatch) {
     return (
-      <Card className="border-slate-800 bg-[#151E2F] shadow-md">
+      <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
         <CardContent className="p-4 py-12 text-center">
           <Activity className="w-12 h-12 text-slate-700 mx-auto mb-3" />
           <p className="text-sm text-slate-500">Vui lòng chọn Camera ở trên để xem chỉ số môi trường</p>
@@ -128,31 +148,38 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
   }
 
   return (
-    <Card className="border-slate-800 bg-[#151E2F] shadow-md">
+    <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
       <CardHeader className="border-b border-slate-800 bg-[#151E2F] flex-row justify-between items-center py-4">
         <CardTitle className="text-base md:text-lg text-white">
           Chỉ số môi trường & AI Dự đoán
         </CardTitle>
+        {IS_DEMO_MODE && (
+          <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30">Chế độ Demo</Badge>
+        )}
       </CardHeader>
       
       <CardContent className="p-4 md:p-5 space-y-5 pt-5">
         
-        {/* LƯỚI 2 CHỈ SỐ: NHIỆT ĐỘ - ĐỘ ẨM (LUÔN LUÔN HIỂN THỊ) */}
+        {/* LƯỚI 2 CHỈ SỐ: NHIỆT ĐỘ - ĐỘ ẨM */}
         <div className="grid grid-cols-2 gap-4">
           <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
             <Thermometer className="w-6 h-6 text-orange-400 mb-2" />
-            <span className="text-2xl font-bold text-white">{weatherData.temp.toFixed(1)}°C</span>
-            <span className="text-xs text-slate-500 font-medium mt-1">Nhiệt độ</span>
+            <span className="text-2xl font-bold text-white">
+              {weatherData.temp > 0 ? weatherData.temp.toFixed(1) : "32.5"}°C
+            </span>
+            <span className="text-xs text-slate-500 font-medium mt-1">Nhiệt độ (Demo)</span>
           </div>
           
           <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
             <Droplets className="w-6 h-6 text-cyan-400 mb-2" />
-            <span className="text-2xl font-bold text-white">{weatherData.hum.toFixed(1)}%</span>
-            <span className="text-xs text-slate-500 font-medium mt-1">Độ ẩm</span>
+            <span className="text-2xl font-bold text-white">
+              {weatherData.hum > 0 ? weatherData.hum.toFixed(1) : "65.0"}%
+            </span>
+            <span className="text-xs text-slate-500 font-medium mt-1">Độ ẩm (Demo)</span>
           </div>
         </div>
 
-        {/* Cảnh báo mưa (Nếu có) */}
+        {/* Cảnh báo mưa */}
         {weatherData.rainLabel && (
           <div className={`p-3 rounded-xl border flex-row items-center gap-2 ${
             weatherData.isRaining || weatherData.rainLabel.includes('cao')
@@ -164,8 +191,8 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           </div>
         )}
 
-        {/* KHỐI HIỂN THỊ AI DỰ ĐOÁN CHỈ HIỆN KHI CÓ BÁNH (hasDetection = true) */}
-        {hasDetection ? (
+        {/* KHỐI HIỂN THỊ AI DỰ ĐOÁN (ĐÃ ÉP BẬT) */}
+        {showPredictionUI ? (
           <>
             <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-violet-500 to-transparent opacity-50" />
@@ -183,10 +210,10 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                     ? estimatedCompletion.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
                     : '--:--'}
                 </div>
-                <div className="text-xs text-violet-400 font-medium">
+                <div className="text-xs text-violet-400 font-medium animate-pulse">
                   {predictionData.minutesLeft > 0 
                     ? `Còn lại: ${Math.floor(predictionData.minutesLeft / 60)}h ${Math.round(predictionData.minutesLeft % 60)}p` 
-                    : (predictionData.dryness >= 100 ? 'Đã khô hoàn toàn!' : 'Đang tính toán...')}
+                    : 'Đang phân tích dữ liệu...'}
                 </div>
               </div>
             </div>
@@ -205,7 +232,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
               </div>
               <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-1000"
+                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-1000 ease-in-out"
                   style={{ width: `${Math.round(predictionData.dryness)}%` }}
                 />
               </div>
@@ -215,7 +242,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                   : predictionData.dryness < 50
                     ? "Giai đoạn đầu (Đang ráo mặt)"
                     : predictionData.dryness < 80
-                      ? "Đang khô nhanh"
+                      ? "Đang khô nhanh (Tối ưu)"
                       : predictionData.dryness < 100 
                         ? "Sắp hoàn thành (Chuẩn bị thu hoạch)" 
                         : "🎉 Bánh đã khô hoàn toàn!"}
@@ -232,4 +259,4 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
       </CardContent>
     </Card>
   );
-}
+} 

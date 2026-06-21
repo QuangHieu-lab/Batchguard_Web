@@ -32,7 +32,7 @@ export default function WeatherAlertWeb() {
         theme: 'red', bg: 'bg-red-500/10', border: 'border-red-500/40', text: 'text-red-500',
         title: 'NGUY HIỂM: CÓ MƯA!', icon: CloudLightning, 
         action: 'KÍCH HOẠT THU BÁNH KHẨN CẤP',
-        desc: `Khả năng mưa cực cao (${currentWeather.rainChance}%)` 
+        desc: `Khả năng mưa cực cao ` 
       };
     }
     
@@ -42,7 +42,7 @@ export default function WeatherAlertWeb() {
         theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
         title: 'CẢNH BÁO RỦI RO', icon: AlertTriangle, 
         action: 'CHUẨN BỊ KÉO BẠT / THU BÁNH',
-        desc: `Có nguy cơ mưa rào (${currentWeather.rainChance}%)`
+        desc: `Có nguy cơ mưa rào `
       };
     }
 
@@ -52,7 +52,7 @@ export default function WeatherAlertWeb() {
         theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
         title: 'LƯU Ý ĐỘ ẨM CAO', icon: Droplets, 
         action: 'ĐẢM BẢO THÔNG GIÓ',
-        desc: `Độ ẩm ${currentWeather.humidity}%, bánh lâu khô`
+        desc: `Độ ẩm  , bánh lâu khô`
       };
     }
     
