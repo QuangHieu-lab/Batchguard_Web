@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router';; // 🚀 Thêm Hook điều hướng
+import { useNavigate } from 'react-router'; 
 import { useWeather } from '../hooks/useWeather';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -6,11 +6,11 @@ import { VoiceNotification } from '../components/VoiceNotification';
 import { 
   Cloud, CloudRain, Droplets, Thermometer, Wind,
   Sun, CloudDrizzle, AlertTriangle, Lightbulb, Cpu, CheckCircle2, Gauge,
-  ChevronRight // 🚀 Import thêm icon mũi tên
+  ChevronRight 
 } from 'lucide-react';
 
 export default function Weather() {
-  const navigate = useNavigate(); // 🚀 Khởi tạo hàm điều hướng
+  const navigate = useNavigate(); 
   const { currentWeather, advice, sensorData, loading, error } = useWeather();
 
   const getWeatherIcon = (icon: string | undefined, size: string = 'w-8 h-8') => {
@@ -53,9 +53,8 @@ export default function Weather() {
         </div>
       </div>
 
-      {/* 4 THẺ THỜI TIẾT */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Nhiệt độ */}
+      {/* 5 THẺ THỜI TIẾT */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="border border-[#3A2E2A] bg-gradient-to-br from-[#2A2421] to-[#1F1A18] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -63,7 +62,7 @@ export default function Weather() {
                 <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center border border-orange-500/30">
                   <Thermometer className="w-6 h-6 text-orange-400" />
                 </div>
-                <span className="text-sm font-medium text-slate-300">Nhiệt độ (Thời tiết)</span>
+                <span className="text-sm font-medium text-slate-300">Nhiệt độ</span>
               </div>
             </div>
             <div className="text-4xl font-bold text-orange-500 mb-2 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">
@@ -76,7 +75,6 @@ export default function Weather() {
           </CardContent>
         </Card>
 
-        {/* Độ ẩm */}
         <Card className="border border-[#2A344D] bg-gradient-to-br from-[#1E2335] to-[#171A28] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -93,7 +91,6 @@ export default function Weather() {
           </CardContent>
         </Card>
 
-        {/* Khả năng mưa */}
         <Card className="border border-[#25424D] bg-gradient-to-br from-[#1A2C35] to-[#14222A] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -101,7 +98,7 @@ export default function Weather() {
                 <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center border border-cyan-500/30">
                   <CloudRain className="w-6 h-6 text-cyan-400" />
                 </div>
-                <span className="text-sm font-medium text-slate-300">Rủi ro mưa hiện tại</span>
+                <span className="text-sm font-medium text-slate-300">Rủi ro mưa</span>
               </div>
             </div>
             <div className="text-4xl font-bold text-cyan-500 mb-2 drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">
@@ -109,12 +106,27 @@ export default function Weather() {
             </div>
             <div className="flex items-center gap-1.5 text-xs text-cyan-400/80">
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>Đỉnh điểm 12h tới: {currentWeather.maxPrecip12h}%</span>
+              <span>Đỉnh điểm 12h: {currentWeather.maxPrecip12h}%</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Tốc độ gió */}
+        <Card className="border border-[#3D2547] bg-gradient-to-br from-[#26182D] to-[#1A0F1F] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-violet-500/20 rounded-xl flex items-center justify-center border border-violet-500/30">
+                  <CloudDrizzle className="w-6 h-6 text-violet-400" />
+                </div>
+                <span className="text-sm font-medium text-slate-300">Lượng mưa</span>
+              </div>
+            </div>
+            <div className="text-4xl font-bold text-violet-500 mb-1 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]">
+              {currentWeather.precipitation_mm || 0} <span className="text-2xl text-violet-500/70">mm</span>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border border-[#24453F] bg-gradient-to-br from-[#192E2B] to-[#132421] shadow-[0_4px_15px_rgba(0,0,0,0.3)]">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -132,9 +144,7 @@ export default function Weather() {
         </Card>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 🚀 BANNER HIỆN TRẠNG (Đã được nâng cấp thành Nút Click Điều Hướng) */}
-      {/* ========================================================================= */}
+      {/* BANNER HIỆN TRẠNG AI */}
       <Card 
         onClick={() => navigate('/dashboard/weather-alert')} 
         className="border-none shadow-[0_8px_30px_rgba(0,0,0,0.5)] bg-gradient-to-r from-[#D8DAE0] via-[#F1F3F5] to-[#B3B6BD] cursor-pointer hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)] hover:-translate-y-1 transition-all duration-300 group"
@@ -142,7 +152,6 @@ export default function Weather() {
         <CardContent className="p-4 md:p-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             
-            {/* Box Icon và Tiêu đề */}
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-300">
                 {getWeatherIcon(currentWeather.icon, 'w-10 h-10 text-white')}
@@ -157,19 +166,22 @@ export default function Weather() {
               </div>
             </div>
             
-            {/* Box Nút Cảnh báo và Mũi tên */}
             <div className="flex items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
-              {currentWeather.isRaining || currentWeather.rainChance > 50 ? (
+              {/* 🚀 ĐÃ CẬP NHẬT LOGIC 3 MỨC ĐỘ 70 - 40 - <40 TẠI ĐÂY */}
+              {currentWeather.isRaining || currentWeather.rainChance >= 70 ? (
                 <Badge className="bg-red-500 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" /> Cảnh báo: Rủi ro mưa cao
+                  <AlertTriangle className="w-4 h-4" /> Cảnh báo: Khả năng mưa cao
+                </Badge>
+              ) : currentWeather.rainChance >= 40 ? (
+                <Badge className="bg-orange-500 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
+                  <Cloud className="w-4 h-4" /> Lưu ý: Có thể có mưa
                 </Badge>
               ) : (
                 <Badge className="bg-emerald-500 text-white border-none shadow-md text-base px-4 py-2 font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> An toàn
+                  <CheckCircle2 className="w-4 h-4" /> An toàn: Ít khả năng mưa
                 </Badge>
               )}
               
-              {/* 🚀 Mũi tên chuyển trang (Chỉ hiển thị rõ khi rê chuột) */}
               <div className="bg-black/10 group-hover:bg-cyan-500 p-2 rounded-full transition-colors duration-300 ml-1">
                 <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-white transition-transform duration-300 group-hover:translate-x-1" />
               </div>
@@ -181,8 +193,6 @@ export default function Weather() {
 
       {/* CẢM BIẾN VÀ LỜI KHUYÊN AI */}
       <div className="grid lg:grid-cols-2 gap-6">
-        
-        {/* Cảm biến thực tế */}
         {sensorData && (
           <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)] overflow-hidden">
             <CardHeader className="border-b border-slate-800 bg-[#151E2F]">
@@ -221,7 +231,6 @@ export default function Weather() {
           </Card>
         )}
 
-        {/* Lời khuyên từ AI */}
         {advice && advice.length > 0 && (
           <Card className="border border-purple-500/30 bg-[#1A1625] shadow-[0_0_20px_rgba(168,85,247,0.1)] h-full">
             <CardHeader className="border-b border-purple-900/50 bg-[#1A1625]">
