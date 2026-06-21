@@ -16,7 +16,7 @@ export default function WeatherAlertWeb() {
   };
 
   // =====================================
-  // LOGIC ĐÁNH GIÁ MỨC ĐỘ RỦI RO
+  // LOGIC ĐÁNH GIÁ MỨC ĐỘ RỦI RO (Đã đồng bộ Python: 70 - 40 - <40)
   // =====================================
   const getSeverityConfig = () => {
     if (!currentWeather) {
@@ -26,42 +26,42 @@ export default function WeatherAlertWeb() {
       };
     }
     
-    // NGUY HIỂM: Đang mưa hoặc khả năng mưa > 60%
-    if (currentWeather.isRaining || currentWeather.rainChance > 60) {
+    // 🚀 MỨC HIGH: Đang mưa hoặc khả năng mưa >= 70%
+    if (currentWeather.isRaining || currentWeather.rainChance >= 70) {
       return { 
         theme: 'red', bg: 'bg-red-500/10', border: 'border-red-500/40', text: 'text-red-500',
-        title: 'NGUY HIỂM: CÓ MƯA!', icon: CloudLightning, 
+        title: 'CẢNH BÁO: KHẢ NĂNG MƯA CAO', icon: CloudLightning, 
         action: 'KÍCH HOẠT THU BÁNH KHẨN CẤP',
-        desc: `Khả năng mưa cực cao ` 
+        desc: 'Rủi ro mưa rất lớn, hãy chuẩn bị bạt che hoặc thu gom bánh ngay lập tức!' 
       };
     }
     
-    // CẢNH BÁO: Khả năng mưa > 30%
-    if (currentWeather.rainChance > 30) {
+    // 🚀 MỨC MEDIUM: Khả năng mưa >= 40%
+    if (currentWeather.rainChance >= 40) {
       return { 
         theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
-        title: 'CẢNH BÁO RỦI RO', icon: AlertTriangle, 
+        title: 'LƯU Ý: CÓ THỂ CÓ MƯA', icon: AlertTriangle, 
         action: 'CHUẨN BỊ KÉO BẠT / THU BÁNH',
-        desc: `Có nguy cơ mưa rào `
+        desc: 'Thời tiết thay đổi, có khả năng mưa. Vui lòng theo dõi sát xưởng phơi.'
       };
     }
 
-    // CHÚ Ý: Độ ẩm quá cao (nhưng không mưa)
+    // CHÚ Ý PHỤ: Độ ẩm quá cao (nhưng không mưa) - Giữ lại vì tốt cho phơi bánh
     if (currentWeather.humidity > 75) {
       return { 
         theme: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-500',
-        title: 'LƯU Ý ĐỘ ẨM CAO', icon: Droplets, 
+        title: 'LƯU Ý: ĐỘ ẨM KHÔNG KHÍ CAO', icon: Droplets, 
         action: 'ĐẢM BẢO THÔNG GIÓ',
-        desc: `Độ ẩm  , bánh lâu khô`
+        desc: 'Độ ẩm môi trường rất cao, bánh sẽ khó ráo mặt và lâu khô hơn.'
       };
     }
     
-    // AN TOÀN
+    // 🚀 MỨC LOW: Khả năng mưa < 40%
     return { 
       theme: 'emerald', bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-500',
-      title: 'ĐIỀU KIỆN AN TOÀN', icon: CheckCircle, 
+      title: 'AN TOÀN: ÍT KHẢ NĂNG MƯA', icon: CheckCircle, 
       action: 'TIẾP TỤC PHƠI BÌNH THƯỜNG',
-      desc: 'Ít khả năng mưa, thời tiết thuận lợi' 
+      desc: 'Thời tiết thuận lợi, rất tốt để phơi bánh.' 
     };
   };
 
@@ -119,7 +119,6 @@ export default function WeatherAlertWeb() {
                   <h3 className={`text-3xl font-black uppercase tracking-tight ${severity.text}`}>
                     {severity.title}
                   </h3>
-                  {/* 🚀 ĐÃ SỬA: Hiển thị mô tả động dựa trên điều kiện thời tiết thực tế */}
                   <p className="text-slate-300 font-medium mt-1">
                     {severity.desc}
                   </p>

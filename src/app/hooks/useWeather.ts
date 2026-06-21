@@ -25,6 +25,7 @@ export interface CurrentWeather {
   pressure: number;
   maxPrecip12h: number;
   isRaining: boolean;
+  precipitation_mm: number;
 }
 
 const DEFAULT_LAT = 10.2264;
@@ -68,7 +69,7 @@ export function useWeather(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON)
           humidity: data?.api_weather?.humidity_percent || 0,
           windSpeed: data?.api_weather?.wind_speed_ms || 0,
           pressure: data?.api_weather?.pressure_hpa || 0,
-          
+          precipitation_mm: data?.api_weather?.precipitation_mm || 0,
           rainChance: data?.prediction?.rain_score || 0,
           maxPrecip12h: data?.prediction?.max_precip_probability_12h || 0,
           isRaining: data?.prediction?.currently_raining || false,

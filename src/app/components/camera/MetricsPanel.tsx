@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Thermometer, Droplets, TrendingUp, Clock, Activity, CloudRain, Badge } from 'lucide-react';
 import type { Batch } from '../../contexts/SystemContext';
@@ -19,9 +19,6 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
   // 🚀 BIẾN ÉP BẬT CHẾ ĐỘ DEMO CHO VIDEO TEST
   const IS_DEMO_MODE = true; 
   const showPredictionUI = hasDetection || IS_DEMO_MODE;
-
-  // 🚀 THÊM DÒNG NÀY: Lưu lại thời điểm bắt đầu bật Camera để làm mốc đếm ngược
-  const demoStartTime = useRef(Date.now());
 
   useEffect(() => {
     let isMounted = true;
@@ -91,7 +88,6 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             }
           } catch (e) {
             // 🚀 TỰ ĐỘNG TÍNH TOÁN (FALLBACK) CHO DEMO
-            // Tạo số liệu giả lập nếu Cảm biến đang là 0 để demo sinh động
             const demoTemp = currentTemp > 0 ? currentTemp : 32.5;
             const demoHum = currentHum > 0 ? currentHum : 65;
 
@@ -99,16 +95,26 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             let baseMins = 120 - ((demoTemp - 30) * 5) + ((demoHum - 60) * 2);
             baseMins = Math.max(30, Math.min(baseMins, 300)); 
 
-            // 2. Tính số phút đã trôi qua kể từ lúc bật Camera
-            const elapsedMins = (Date.now() - demoStartTime.current) / 60000;
+            // 2. 🛡️ CHỐT LỖI REFRESH: Lưu mốc thời gian độc lập theo từng Camera vào localStorage
+            const storageKey = `demo_start_time_${cameraId}`;
+            let savedStartTime = localStorage.getItem(storageKey);
+            
+            if (!savedStartTime) {
+              // Nếu chưa có mốc cũ thì mới ghi mốc mới vào ổ cứng trình duyệt
+              savedStartTime = Date.now().toString();
+              localStorage.setItem(storageKey, savedStartTime);
+            }
 
-            // 3. Số phút còn lại = Tổng phút - Phút đã trôi (Tạo hiệu ứng đếm ngược thật)
+            // 3. Tính số phút thực tế đã trôi qua kể từ mốc lưu trong localStorage
+            const elapsedMins = (Date.now() - parseInt(savedStartTime, 10)) / 60000;
+
+            // 4. Số phút còn lại đếm ngược liên tục
             realMinutesLeft = Math.max(0, baseMins - elapsedMins); 
             
-            // 4. Tính phần trăm độ khô
+            // 5. Tính phần trăm độ khô tăng dần theo thời gian trôi qua
             realDryness = 100 - ((realMinutesLeft / baseMins) * 100);
             
-            // Thêm một chút dao động (random nhẹ) để thanh tiến độ nhìn "Real-time" và giống AI đang chạy hơn
+            // Thêm một chút dao động nhẹ cho sinh động giao diện AI
             const randomFluctuation = (Math.random() * 1.5) - 0.75; 
             realDryness = Math.max(0, Math.min(100, realDryness + randomFluctuation)); 
           }
@@ -125,7 +131,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
     };
 
     fetchRealtimeData();
-    const interval = setInterval(fetchRealtimeData, 5000); // 🚀 Tăng tốc độ render demo lên 5s
+    const interval = setInterval(fetchRealtimeData, 5000); 
     
     return () => {
       isMounted = false;
@@ -191,7 +197,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           </div>
         )}
 
-        {/* KHỐI HIỂN THỊ AI DỰ ĐOÁN (ĐÃ ÉP BẬT) */}
+        {/* KHỐI HIỂN THỊ AI DỰ ĐOÁN */}
         {showPredictionUI ? (
           <>
             <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner relative overflow-hidden">
@@ -259,4 +265,4 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
       </CardContent>
     </Card>
   );
-} 
+}
