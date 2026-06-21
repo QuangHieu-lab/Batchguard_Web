@@ -93,7 +93,7 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
       formData.append('file', compressedFile);
       
       // Lấy URL của Server Python YOLO
-      const API_BASE_URL = (import.meta as any).env?.VITE_AI_URL || 'https://mylongai-backend-v2.onrender.com';
+      const API_BASE_URL = (import.meta as any).env?.VITE_AI_URL || 'https://huntrot-mylongai-backed-modelai.hf.space';
       let response: Response | null = null;
       
       // 2. Gửi cho Python YOLO Server

@@ -56,7 +56,7 @@ export function RealtimeCameraYolo() {
     
     try {
       // 🚀 2. Sử dụng Biến môi trường thay vì Proxy/Hardcode
-      const API_BASE_URL = (import.meta as any).VITE_API_URL || 'https://mylongai-backend-v2.onrender.com';
+      const API_BASE_URL = (import.meta as any).VITE_API_URL || 'https://huntrot-mylongai-backed-modelai.hf.space ';
       
       const res = await fetch(`${API_BASE_URL}/ai/detect-realtime`, {
         method: "POST",
