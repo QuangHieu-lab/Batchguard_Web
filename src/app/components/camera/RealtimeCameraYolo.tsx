@@ -9,6 +9,9 @@ const CLASS_NAMES: Record<number, string> = {
   2: "Bánh tráng rách (Lỗi)",
 };
 
+// Khai báo kiểu trả về cho trạng thái API
+type DetectStatus = 'success' | 'rate_limit' | 'error';
+
 export function RealtimeCameraYolo() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,8 +27,10 @@ export function RealtimeCameraYolo() {
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  // 🚀 TÍNH NĂNG MỚI: Tắt/Bật chế độ gộp thành Vỉ bánh
   const [groupMode, setGroupMode] = useState(true);
+
+  // 🚀 BIẾN LƯU THỜI GIAN CHỜ (Khởi điểm an toàn là 3 giây)
+  const currentDelayRef = useRef(3000);
 
   const drawDetections = useCallback((detections: { label: string; confidence: number; bbox: number[] }[]) => {
     const canvas = canvasRef.current;
@@ -39,7 +44,6 @@ export function RealtimeCameraYolo() {
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Hàm vẽ 1 khung vuông chuẩn
     const drawBox = (x1: number, y1: number, x2: number, y2: number, label: string, color: string = "#00e5ff") => {
       ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(3, canvas.width / 250); 
@@ -55,10 +59,8 @@ export function RealtimeCameraYolo() {
       ctx.fillText(label, x1 + 4, y1 + fontSize + 2);
     };
 
-    // 🚀 LỌC NHIỄU: Bỏ qua các khung có độ tin cậy quá thấp (Dưới 40%)
     const validDetections = detections.filter(d => d.confidence >= 0.4);
 
-    // 🚀 THUẬT TOÁN GỘP VỈ: Nếu có từ 4 cái bánh trở lên, gom lại thành 1 Vỉ
     if (groupMode && validDetections.length >= 4) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
@@ -70,11 +72,9 @@ export function RealtimeCameraYolo() {
         maxY = Math.max(maxY, y2);
       });
 
-      // Vẽ 1 khung bự bao quanh toàn bộ
-      drawBox(minX, minY, maxX, maxY, `VỈ BÁNH TRÁNG (${validDetections.length} cái)`, "#a855f7"); // Màu tím cho Vỉ
+      drawBox(minX, minY, maxX, maxY, `VỈ BÁNH TRÁNG (${validDetections.length} cái)`, "#a855f7");
     } 
     else {
-      // 🚀 CHẾ ĐỘ BÌNH THƯỜNG: Vẽ từng cái (nếu ít hơn 4 cái hoặc tắt groupMode)
       validDetections.forEach((d) => {
         if (d.bbox.length !== 4) return;
         const [x1, y1, x2, y2] = d.bbox;
@@ -82,16 +82,17 @@ export function RealtimeCameraYolo() {
         drawBox(x1, y1, x2, y2, `${d.label} ${conf}%`);
       });
     }
-  }, [groupMode]); // Nhớ cập nhật lại khi groupMode thay đổi
+  }, [groupMode]);
 
-  const captureAndDetect = useCallback(async (): Promise<boolean> => {
+  // 🚀 ĐÃ CẬP NHẬT: Trả về trạng thái lỗi cụ thể
+  const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     const video = videoRef.current;
-    if (!video || video.readyState < 2 || video.videoWidth === 0) return true; 
+    if (!video || video.readyState < 2 || video.videoWidth === 0) return 'error'; 
     
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    const MAX_DIM = 640;
+    const MAX_DIM = 416;
     let w = vw;
     let h = vh;
     if (w > h) {
@@ -111,13 +112,13 @@ export function RealtimeCameraYolo() {
     snap.height = h;
     snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
     
-    const rawDataUrl = snap.toDataURL("image/jpeg", 0.8);
+    const rawDataUrl = snap.toDataURL("image/jpeg", 0.5);
     const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
     
-    if (base64.length < 1000) return true;
+    if (base64.length < 1000) return 'error';
 
     setIsScanning(true);
-    let isSuccess = true;
+    let status: DetectStatus = 'success';
     
     try {
       const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://huntrot-mylongai-backed-modelai.hf.space';
@@ -129,14 +130,15 @@ export function RealtimeCameraYolo() {
       });
       
       if (res.status === 429) {
-        setRealtimeError("Server AI đang bận, tự động giảm tốc độ...");
-        return false; 
+        console.warn("Lỗi 429: Bị giới hạn tỷ lệ (Rate Limit)");
+        setRealtimeError("Server AI quá tải, đang lùi thời gian thử lại...");
+        return 'rate_limit'; 
       }
 
       if (!res.ok) throw new Error(`API lỗi: ${res.status}`);
       
       const ct = res.headers.get('content-type') ?? '';
-      if (!ct.includes('application/json')) return true;
+      if (!ct.includes('application/json')) return 'success';
       
       const data = await res.json();
       setRealtimeError(null); 
@@ -169,26 +171,39 @@ export function RealtimeCameraYolo() {
       if (!err.message?.includes('429')) {
         setRealtimeError("Đứt kết nối AI, đang kết nối lại...");
       }
-      isSuccess = false;
+      status = 'error';
     } finally { 
       setIsScanning(false); 
     }
-    return isSuccess;
+    
+    return status;
   }, [drawDetections]);
 
   const loopRef = useRef(false);
 
+  // 🚀 THUẬT TOÁN GIÃN CÁCH LŨY THỪA (Exponential Backoff)
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
-    const isSuccess = await captureAndDetect();
+    
+    const status = await captureAndDetect();
+    
     if (loopRef.current) {
-      const nextDelay = isSuccess ? 2500 : 5000; 
-      intervalRef.current = setTimeout(detectLoop, nextDelay);
+      if (status === 'success') {
+        currentDelayRef.current = 3000; // Chạy ngon thì trả về 3s mặc định
+      } else if (status === 'rate_limit') {
+        // Nếu bị chặn 429, nhân rưỡi thời gian chờ (Tối đa chờ 15s để không bị đứng im)
+        currentDelayRef.current = Math.min(currentDelayRef.current * 1.5, 15000);
+      } else {
+        currentDelayRef.current = 5000; // Lỗi mạng thông thường chờ 5s
+      }
+      
+      intervalRef.current = setTimeout(detectLoop, currentDelayRef.current);
     }
   }, [captureAndDetect]);
 
   const stopAny = () => {
     loopRef.current = false;
+    currentDelayRef.current = 3000; // Reset lại delay khi dừng
     if (intervalRef.current) clearTimeout(intervalRef.current);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -260,7 +275,6 @@ export function RealtimeCameraYolo() {
 
   useEffect(() => () => stopAny(), []);
 
-  // Gọi lại drawDetections mỗi khi bật/tắt nút Gộp Vỉ để hình vẽ thay đổi ngay lập tức
   useEffect(() => {
     if (realtimeDetections.length > 0) {
       drawDetections(realtimeDetections);
@@ -277,7 +291,6 @@ export function RealtimeCameraYolo() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* 🚀 NÚT BẬT TẮT CHẾ ĐỘ GỘP VỈ */}
             <button
               onClick={() => setGroupMode(!groupMode)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
@@ -322,7 +335,6 @@ export function RealtimeCameraYolo() {
       <CardContent className="p-6">
         <div className="grid md:grid-cols-2 gap-6">
           
-          {/* 🚀 ĐÃ SỬA LỖI LỆCH KHUNG: Chuyển object-cover thành object-contain */}
           <div className="relative bg-[#0B1121] rounded-xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center">
             {!cameraActive && !realtimeLoading && (
               <div className="text-center text-slate-600">
@@ -355,7 +367,6 @@ export function RealtimeCameraYolo() {
             )}
           </div>
           
-          {/* Detection results */}
           <div className="space-y-3">
             {realtimeError && (
               <div className="flex items-center gap-2 text-amber-400 text-sm p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
@@ -390,6 +401,18 @@ export function RealtimeCameraYolo() {
                     </Badge>
                   </div>
                 ))}
+              </div>
+            )}
+            {cameraActive && realtimeDetections.length === 0 && !realtimeError && (
+              <div className="text-center py-6 text-slate-600">
+                <Scan className="w-8 h-8 mx-auto mb-2 animate-pulse" />
+                <p className="text-sm">Đang quét... chưa phát hiện đối tượng</p>
+              </div>
+            )}
+            {!cameraActive && !realtimeLoading && (
+              <div className="text-center py-8 text-slate-600">
+                <Crosshair className="w-10 h-10 mx-auto mb-2" />
+                <p className="text-sm">Bật Webcam hoặc Tải Video để bắt đầu</p>
               </div>
             )}
           </div>
