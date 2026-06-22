@@ -9,6 +9,9 @@ const CLASS_NAMES: Record<number, string> = {
   2: "Bánh tráng rách (Lỗi)",
 };
 
+// Khai báo kiểu trả về cho trạng thái API
+type DetectStatus = 'success' | 'rate_limit' | 'error';
+
 export function RealtimeCameraYolo() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,8 +27,10 @@ export function RealtimeCameraYolo() {
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Tắt/Bật chế độ gộp thành Vỉ bánh
   const [groupMode, setGroupMode] = useState(true);
+
+  // 🚀 BIẾN LƯU THỜI GIAN CHỜ (Khởi điểm an toàn là 3 giây)
+  const currentDelayRef = useRef(3000);
 
   const drawDetections = useCallback((detections: { label: string; confidence: number; bbox: number[] }[]) => {
     const canvas = canvasRef.current;
@@ -54,10 +59,8 @@ export function RealtimeCameraYolo() {
       ctx.fillText(label, x1 + 4, y1 + fontSize + 2);
     };
 
-    // Lọc nhiễu: Bỏ qua khung < 40%
     const validDetections = detections.filter(d => d.confidence >= 0.4);
 
-    // Thuật toán Gộp Vỉ
     if (groupMode && validDetections.length >= 4) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
@@ -81,14 +84,14 @@ export function RealtimeCameraYolo() {
     }
   }, [groupMode]);
 
-  const captureAndDetect = useCallback(async (): Promise<boolean> => {
+  // 🚀 ĐÃ CẬP NHẬT: Trả về trạng thái lỗi cụ thể
+  const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     const video = videoRef.current;
-    if (!video || video.readyState < 2 || video.videoWidth === 0) return true; 
+    if (!video || video.readyState < 2 || video.videoWidth === 0) return 'error'; 
     
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // 🚀 ÉP XUNG: Giảm độ phân giải xuống 416px để tải cực nhanh qua API HF
     const MAX_DIM = 416;
     let w = vw;
     let h = vh;
@@ -109,14 +112,13 @@ export function RealtimeCameraYolo() {
     snap.height = h;
     snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
     
-    // 🚀 ÉP XUNG: Nén chất lượng ảnh xuống 50% (0.5) giảm thiểu nghẽn mạng
     const rawDataUrl = snap.toDataURL("image/jpeg", 0.5);
     const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
     
-    if (base64.length < 1000) return true;
+    if (base64.length < 1000) return 'error';
 
     setIsScanning(true);
-    let isSuccess = true;
+    let status: DetectStatus = 'success';
     
     try {
       const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://huntrot-mylongai-backed-modelai.hf.space';
@@ -128,14 +130,15 @@ export function RealtimeCameraYolo() {
       });
       
       if (res.status === 429) {
-        setRealtimeError("Server AI đang bận, tự động giảm tốc độ...");
-        return false; 
+        console.warn("Lỗi 429: Bị giới hạn tỷ lệ (Rate Limit)");
+        setRealtimeError("Server AI quá tải, đang lùi thời gian thử lại...");
+        return 'rate_limit'; 
       }
 
       if (!res.ok) throw new Error(`API lỗi: ${res.status}`);
       
       const ct = res.headers.get('content-type') ?? '';
-      if (!ct.includes('application/json')) return true;
+      if (!ct.includes('application/json')) return 'success';
       
       const data = await res.json();
       setRealtimeError(null); 
@@ -145,7 +148,6 @@ export function RealtimeCameraYolo() {
       const scaleY = vh / h;
 
       const dets = raw.map((d) => {
-        // Khai báo chuẩn TypeScript để không bị lỗi mappedBbox
         let mappedBbox: number[] = [];
         if (d.bbox && d.bbox.length === 4) {
           mappedBbox = [
@@ -169,26 +171,39 @@ export function RealtimeCameraYolo() {
       if (!err.message?.includes('429')) {
         setRealtimeError("Đứt kết nối AI, đang kết nối lại...");
       }
-      isSuccess = false;
+      status = 'error';
     } finally { 
       setIsScanning(false); 
     }
-    return isSuccess;
+    
+    return status;
   }, [drawDetections]);
 
   const loopRef = useRef(false);
 
+  // 🚀 THUẬT TOÁN GIÃN CÁCH LŨY THỪA (Exponential Backoff)
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
-    const isSuccess = await captureAndDetect();
+    
+    const status = await captureAndDetect();
+    
     if (loopRef.current) {
-      const nextDelay = isSuccess ? 2500 : 5000; 
-      intervalRef.current = setTimeout(detectLoop, nextDelay);
+      if (status === 'success') {
+        currentDelayRef.current = 3000; // Chạy ngon thì trả về 3s mặc định
+      } else if (status === 'rate_limit') {
+        // Nếu bị chặn 429, nhân rưỡi thời gian chờ (Tối đa chờ 15s để không bị đứng im)
+        currentDelayRef.current = Math.min(currentDelayRef.current * 1.5, 15000);
+      } else {
+        currentDelayRef.current = 5000; // Lỗi mạng thông thường chờ 5s
+      }
+      
+      intervalRef.current = setTimeout(detectLoop, currentDelayRef.current);
     }
   }, [captureAndDetect]);
 
   const stopAny = () => {
     loopRef.current = false;
+    currentDelayRef.current = 3000; // Reset lại delay khi dừng
     if (intervalRef.current) clearTimeout(intervalRef.current);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -386,6 +401,18 @@ export function RealtimeCameraYolo() {
                     </Badge>
                   </div>
                 ))}
+              </div>
+            )}
+            {cameraActive && realtimeDetections.length === 0 && !realtimeError && (
+              <div className="text-center py-6 text-slate-600">
+                <Scan className="w-8 h-8 mx-auto mb-2 animate-pulse" />
+                <p className="text-sm">Đang quét... chưa phát hiện đối tượng</p>
+              </div>
+            )}
+            {!cameraActive && !realtimeLoading && (
+              <div className="text-center py-8 text-slate-600">
+                <Crosshair className="w-10 h-10 mx-auto mb-2" />
+                <p className="text-sm">Bật Webcam hoặc Tải Video để bắt đầu</p>
               </div>
             )}
           </div>
