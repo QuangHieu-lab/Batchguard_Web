@@ -24,7 +24,7 @@ export function RealtimeCameraYolo() {
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  // 🚀 TÍNH NĂNG MỚI: Tắt/Bật chế độ gộp thành Vỉ bánh
+  // Tắt/Bật chế độ gộp thành Vỉ bánh
   const [groupMode, setGroupMode] = useState(true);
 
   const drawDetections = useCallback((detections: { label: string; confidence: number; bbox: number[] }[]) => {
@@ -39,7 +39,6 @@ export function RealtimeCameraYolo() {
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Hàm vẽ 1 khung vuông chuẩn
     const drawBox = (x1: number, y1: number, x2: number, y2: number, label: string, color: string = "#00e5ff") => {
       ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(3, canvas.width / 250); 
@@ -55,10 +54,10 @@ export function RealtimeCameraYolo() {
       ctx.fillText(label, x1 + 4, y1 + fontSize + 2);
     };
 
-    // 🚀 LỌC NHIỄU: Bỏ qua các khung có độ tin cậy quá thấp (Dưới 40%)
+    // Lọc nhiễu: Bỏ qua khung < 40%
     const validDetections = detections.filter(d => d.confidence >= 0.4);
 
-    // 🚀 THUẬT TOÁN GỘP VỈ: Nếu có từ 4 cái bánh trở lên, gom lại thành 1 Vỉ
+    // Thuật toán Gộp Vỉ
     if (groupMode && validDetections.length >= 4) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
@@ -70,11 +69,9 @@ export function RealtimeCameraYolo() {
         maxY = Math.max(maxY, y2);
       });
 
-      // Vẽ 1 khung bự bao quanh toàn bộ
-      drawBox(minX, minY, maxX, maxY, `VỈ BÁNH TRÁNG (${validDetections.length} cái)`, "#a855f7"); // Màu tím cho Vỉ
+      drawBox(minX, minY, maxX, maxY, `VỈ BÁNH TRÁNG (${validDetections.length} cái)`, "#a855f7");
     } 
     else {
-      // 🚀 CHẾ ĐỘ BÌNH THƯỜNG: Vẽ từng cái (nếu ít hơn 4 cái hoặc tắt groupMode)
       validDetections.forEach((d) => {
         if (d.bbox.length !== 4) return;
         const [x1, y1, x2, y2] = d.bbox;
@@ -82,7 +79,7 @@ export function RealtimeCameraYolo() {
         drawBox(x1, y1, x2, y2, `${d.label} ${conf}%`);
       });
     }
-  }, [groupMode]); // Nhớ cập nhật lại khi groupMode thay đổi
+  }, [groupMode]);
 
   const captureAndDetect = useCallback(async (): Promise<boolean> => {
     const video = videoRef.current;
@@ -91,7 +88,8 @@ export function RealtimeCameraYolo() {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    const MAX_DIM = 640;
+    // 🚀 ÉP XUNG: Giảm độ phân giải xuống 416px để tải cực nhanh qua API HF
+    const MAX_DIM = 416;
     let w = vw;
     let h = vh;
     if (w > h) {
@@ -111,7 +109,8 @@ export function RealtimeCameraYolo() {
     snap.height = h;
     snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
     
-    const rawDataUrl = snap.toDataURL("image/jpeg", 0.8);
+    // 🚀 ÉP XUNG: Nén chất lượng ảnh xuống 50% (0.5) giảm thiểu nghẽn mạng
+    const rawDataUrl = snap.toDataURL("image/jpeg", 0.5);
     const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
     
     if (base64.length < 1000) return true;
@@ -146,6 +145,7 @@ export function RealtimeCameraYolo() {
       const scaleY = vh / h;
 
       const dets = raw.map((d) => {
+        // Khai báo chuẩn TypeScript để không bị lỗi mappedBbox
         let mappedBbox: number[] = [];
         if (d.bbox && d.bbox.length === 4) {
           mappedBbox = [
@@ -260,7 +260,6 @@ export function RealtimeCameraYolo() {
 
   useEffect(() => () => stopAny(), []);
 
-  // Gọi lại drawDetections mỗi khi bật/tắt nút Gộp Vỉ để hình vẽ thay đổi ngay lập tức
   useEffect(() => {
     if (realtimeDetections.length > 0) {
       drawDetections(realtimeDetections);
@@ -277,7 +276,6 @@ export function RealtimeCameraYolo() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* 🚀 NÚT BẬT TẮT CHẾ ĐỘ GỘP VỈ */}
             <button
               onClick={() => setGroupMode(!groupMode)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
@@ -322,7 +320,6 @@ export function RealtimeCameraYolo() {
       <CardContent className="p-6">
         <div className="grid md:grid-cols-2 gap-6">
           
-          {/* 🚀 ĐÃ SỬA LỖI LỆCH KHUNG: Chuyển object-cover thành object-contain */}
           <div className="relative bg-[#0B1121] rounded-xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center">
             {!cameraActive && !realtimeLoading && (
               <div className="text-center text-slate-600">
@@ -355,7 +352,6 @@ export function RealtimeCameraYolo() {
             )}
           </div>
           
-          {/* Detection results */}
           <div className="space-y-3">
             {realtimeError && (
               <div className="flex items-center gap-2 text-amber-400 text-sm p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
