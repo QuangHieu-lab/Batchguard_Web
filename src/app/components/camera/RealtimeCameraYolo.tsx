@@ -9,8 +9,7 @@ const CLASS_NAMES: Record<number, string> = {
   2: "Bánh tráng rách (Lỗi)",
 };
 
-// Khai báo kiểu trả về cho trạng thái API
-type DetectStatus = 'success' | 'rate_limit' | 'error';
+type DetectStatus = 'success' | 'rate_limit' | 'error' | 'busy';
 
 export function RealtimeCameraYolo() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,18 +18,16 @@ export function RealtimeCameraYolo() {
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
+  const isDetectingRef = useRef(false);
+  const loopRef = useRef(false);
+
   const [cameraActive, setCameraActive] = useState(false);
   const [videoDemoUrl, setVideoDemoUrl] = useState<string | null>(null);
-  
   const [realtimeDetections, setRealtimeDetections] = useState<{ label: string; confidence: number; bbox: number[] }[]>([]);
   const [realtimeError, setRealtimeError] = useState<string | null>(null);
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-
   const [groupMode, setGroupMode] = useState(true);
-
-  // 🚀 BIẾN LƯU THỜI GIAN CHỜ (Khởi điểm an toàn là 3 giây)
-  const currentDelayRef = useRef(3000);
 
   const drawDetections = useCallback((detections: { label: string; confidence: number; bbox: number[] }[]) => {
     const canvas = canvasRef.current;
@@ -55,7 +52,6 @@ export function RealtimeCameraYolo() {
       ctx.fillStyle = color;
       const fontSize = Math.max(16, canvas.width / 35); 
       ctx.font = `bold ${fontSize}px monospace`;
-      
       ctx.fillText(label, x1 + 4, y1 + fontSize + 2);
     };
 
@@ -63,7 +59,6 @@ export function RealtimeCameraYolo() {
 
     if (groupMode && validDetections.length >= 4) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      
       validDetections.forEach(d => {
         const [x1, y1, x2, y2] = d.bbox;
         minX = Math.min(minX, x1);
@@ -71,10 +66,8 @@ export function RealtimeCameraYolo() {
         maxX = Math.max(maxX, x2);
         maxY = Math.max(maxY, y2);
       });
-
       drawBox(minX, minY, maxX, maxY, `VỈ BÁNH TRÁNG (${validDetections.length} cái)`, "#a855f7");
-    } 
-    else {
+    } else {
       validDetections.forEach((d) => {
         if (d.bbox.length !== 4) return;
         const [x1, y1, x2, y2] = d.bbox;
@@ -84,65 +77,68 @@ export function RealtimeCameraYolo() {
     }
   }, [groupMode]);
 
-  // 🚀 ĐÃ CẬP NHẬT: Trả về trạng thái lỗi cụ thể
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
+    if (isDetectingRef.current) return 'busy';
+    
     const video = videoRef.current;
     if (!video || video.readyState < 2 || video.videoWidth === 0) return 'error'; 
     
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-
-    const MAX_DIM = 416;
-    let w = vw;
-    let h = vh;
-    if (w > h) {
-      if (w > MAX_DIM) {
-        h = Math.round(h * (MAX_DIM / w));
-        w = MAX_DIM;
-      }
-    } else {
-      if (h > MAX_DIM) {
-        w = Math.round(w * (MAX_DIM / h));
-        h = MAX_DIM;
-      }
-    }
-
-    const snap = document.createElement("canvas");
-    snap.width = w;
-    snap.height = h;
-    snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
-    
-    const rawDataUrl = snap.toDataURL("image/jpeg", 0.5);
-    const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
-    
-    if (base64.length < 1000) return 'error';
-
+    isDetectingRef.current = true;
     setIsScanning(true);
-    let status: DetectStatus = 'success';
-    
+
     try {
-      const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://huntrot-mylongai-backed-modelai.hf.space';
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      const MAX_DIM = 416; // Giữ mức ép xung để request nhẹ nhất có thể
+      let w = vw;
+      let h = vh;
+      if (w > h) {
+        if (w > MAX_DIM) {
+          h = Math.round(h * (MAX_DIM / w));
+          w = MAX_DIM;
+        }
+      } else {
+        if (h > MAX_DIM) {
+          w = Math.round(w * (MAX_DIM / h));
+          h = MAX_DIM;
+        }
+      }
+
+      const snap = document.createElement("canvas");
+      snap.width = w;
+      snap.height = h;
+      snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
       
-      const res = await fetch(`${API_BASE_URL}/ai/detect-realtime`, {
+      const rawDataUrl = snap.toDataURL("image/jpeg", 0.5);
+      const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
+      
+      if (base64.length < 1000) return 'error';
+
+      const API_URL = 'https://huntrot-mylongai-backed-modelai.hf.space/ai/detect-realtime';
+      
+      // BƯỚC 1: SEND FRAME (Gửi request và đợi)
+      const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64 }),
       });
       
       if (res.status === 429) {
-        console.warn("Lỗi 429: Bị giới hạn tỷ lệ (Rate Limit)");
-        setRealtimeError("Server AI quá tải, đang lùi thời gian thử lại...");
+        setRealtimeError("Server AI báo bận, đang lùi thời gian chờ...");
         return 'rate_limit'; 
       }
 
       if (!res.ok) throw new Error(`API lỗi: ${res.status}`);
       
       const ct = res.headers.get('content-type') ?? '';
-      if (!ct.includes('application/json')) return 'success';
+      if (!ct.includes('application/json')) return 'error';
       
+      // BƯỚC 2: WAIT RESPONSE (Chờ lấy kết quả)
       const data = await res.json();
       setRealtimeError(null); 
 
+      // BƯỚC 3: HIỂN THỊ KẾT QUẢ
       const raw: any[] = data.objects ?? [];
       const scaleX = vw / w;
       const scaleY = vh / h;
@@ -166,45 +162,48 @@ export function RealtimeCameraYolo() {
       
       setRealtimeDetections(dets.length > 0 ? dets : prev => prev);
       if (dets.length > 0) drawDetections(dets);
-
+      
+      return 'success';
     } catch (err: any) {
       if (!err.message?.includes('429')) {
-        setRealtimeError("Đứt kết nối AI, đang kết nối lại...");
+        setRealtimeError("Đứt kết nối, đang thử lại...");
       }
-      status = 'error';
+      return 'error';
     } finally { 
       setIsScanning(false); 
+      isDetectingRef.current = false; 
     }
-    
-    return status;
   }, [drawDetections]);
 
-  const loopRef = useRef(false);
-
-  // 🚀 THUẬT TOÁN GIÃN CÁCH LŨY THỪA (Exponential Backoff)
+  // 🚀 ĐỒNG BỘ LOGIC BACKEND: Polling chuẩn
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
     
+    // Đã gộp cả 3 bước (Send -> Wait -> Draw) vào hàm này
     const status = await captureAndDetect();
     
     if (loopRef.current) {
-      if (status === 'success') {
-        currentDelayRef.current = 3000; // Chạy ngon thì trả về 3s mặc định
-      } else if (status === 'rate_limit') {
-        // Nếu bị chặn 429, nhân rưỡi thời gian chờ (Tối đa chờ 15s để không bị đứng im)
-        currentDelayRef.current = Math.min(currentDelayRef.current * 1.5, 15000);
-      } else {
-        currentDelayRef.current = 5000; // Lỗi mạng thông thường chờ 5s
+      // BƯỚC 4: SLEEP 1~2 GIÂY TRƯỚC KHI GỬI TIẾP
+      let sleepDelay = 1500; // Mặc định 1.5 giây như BE yêu cầu
+      
+      // Xử lý linh hoạt nếu bị lỗi mạng/quá tải
+      if (status === 'rate_limit') {
+        sleepDelay = 4000; // Ngủ 4s nếu bị đánh gậy 429
+      } else if (status === 'error') {
+        sleepDelay = 3000; // Ngủ 3s nếu lỗi mạng
+      } else if (status === 'busy') {
+        sleepDelay = 500; // Đang chạy thì check lại sau 0.5s
       }
       
-      intervalRef.current = setTimeout(detectLoop, currentDelayRef.current);
+      intervalRef.current = setTimeout(detectLoop, sleepDelay);
     }
   }, [captureAndDetect]);
 
   const stopAny = () => {
     loopRef.current = false;
-    currentDelayRef.current = 3000; // Reset lại delay khi dừng
+    isDetectingRef.current = false;
     if (intervalRef.current) clearTimeout(intervalRef.current);
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -334,7 +333,6 @@ export function RealtimeCameraYolo() {
       </CardHeader>
       <CardContent className="p-6">
         <div className="grid md:grid-cols-2 gap-6">
-          
           <div className="relative bg-[#0B1121] rounded-xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center">
             {!cameraActive && !realtimeLoading && (
               <div className="text-center text-slate-600">
@@ -401,18 +399,6 @@ export function RealtimeCameraYolo() {
                     </Badge>
                   </div>
                 ))}
-              </div>
-            )}
-            {cameraActive && realtimeDetections.length === 0 && !realtimeError && (
-              <div className="text-center py-6 text-slate-600">
-                <Scan className="w-8 h-8 mx-auto mb-2 animate-pulse" />
-                <p className="text-sm">Đang quét... chưa phát hiện đối tượng</p>
-              </div>
-            )}
-            {!cameraActive && !realtimeLoading && (
-              <div className="text-center py-8 text-slate-600">
-                <Crosshair className="w-10 h-10 mx-auto mb-2" />
-                <p className="text-sm">Bật Webcam hoặc Tải Video để bắt đầu</p>
               </div>
             )}
           </div>
