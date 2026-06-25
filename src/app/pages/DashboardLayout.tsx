@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
-import { BarChart3, Sparkles, Camera, Cloud, Volume2 } from 'lucide-react';
+import { BarChart3, Sparkles, Camera, Cloud, Volume2,CreditCard } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { SystemStatus } from '../components/SystemStatus';
 import { WelcomeNotification } from '../components/WelcomeNotification';
@@ -15,6 +15,7 @@ export default function DashboardLayout() {
     { path: '/dashboard/camera', icon: Camera, label: 'Camera quan sát', exact: true },
     { path: '/dashboard/weather', icon: Cloud, label: 'Thời tiết' },
     { path: '/dashboard/voice', icon: Volume2, label: 'Thông báo bằng giọng nói' },
+     { path: '/dashboard/payment', icon: CreditCard, label: 'Gói dịch vụ' },
   ];
 
   const isActive = (path: string, exact?: boolean) => {

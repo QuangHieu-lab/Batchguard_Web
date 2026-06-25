@@ -19,10 +19,10 @@ import Analytics from './pages/admin/Analytics';
 import UserManagement from './pages/admin/UserManagement';
 import Settings from './pages/admin/Settings';
 import WeatherAlert from './pages/WeatherAlert';
-// 🚀 THÊM IMPORT CHO 2 TRANG MỚI TẠO TẠI ĐÂY
 import AiPerformance from './pages/admin/AiPerformance';
 import DryingCycles from './pages/admin/DryingCycles';
 import UserProfile from './pages/UserProfile';
+import UpgradePremium from './pages/UpgradePremium'
 
 const router = createBrowserRouter([
   {
@@ -67,6 +67,10 @@ const router = createBrowserRouter([
           {
             path: 'history',
             element: <History />,
+          },
+           {
+            path: 'payment',
+            element: <UpgradePremium />,
           },
           {
             path:'userprofile',
