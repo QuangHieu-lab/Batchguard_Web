@@ -11,17 +11,6 @@ const CLASS_NAMES: Record<number, string> = {
 
 type DetectStatus = 'success' | 'rate_limit' | 'error' | 'busy';
 
-// ==========================================
-// 🚀 CẤU HÌNH TẦN SUẤT GỬI ẢNH (BENCHMARK)
-// ==========================================
-// Bạn có thể thay đổi số này để test. VD: 1 (chậm), 2 (vừa), 5 (nhanh)
-const TARGET_FPS = 2; 
-
-// Hệ thống sẽ tự tính ra thời gian nghỉ (tính bằng mili-giây)
-// Ví dụ: 2 FPS -> 1000 / 2 = 500ms (Nửa giây gửi 1 lần)
-const BASE_DELAY_MS = 1000 / TARGET_FPS; 
-// ==========================================
-
 export function RealtimeCameraYolo() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +29,6 @@ export function RealtimeCameraYolo() {
   const [groupMode, setGroupMode] = useState(true);
 
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
-    // Nếu ảnh trước đó chưa xử lý xong, từ chối lấy frame mới để chống dồn ứ (Overload)
     if (isDetectingRef.current) return 'busy';
     
     const video = videoRef.current;
@@ -53,7 +41,6 @@ export function RealtimeCameraYolo() {
       const vw = video.videoWidth;
       const vh = video.videoHeight;
 
-      // Nén ảnh xuống 416px để tối ưu băng thông gửi
       const MAX_DIM = 416;
       let w = vw;
       let h = vh;
@@ -88,7 +75,7 @@ export function RealtimeCameraYolo() {
       });
       
       if (res.status === 429) {
-        setRealtimeError(`Server AI quá tải. Đang tự động lùi bước...`);
+        setRealtimeError("Server AI báo bận, đang lùi thời gian chờ...");
         return 'rate_limit'; 
       }
 
@@ -123,6 +110,8 @@ export function RealtimeCameraYolo() {
       
       setRealtimeDetections(dets.length > 0 ? dets : prev => prev);
       
+      // ĐÃ XÓA HÀM drawDetections() TẠI ĐÂY - AI chỉ lấy Data chứ không vẽ Khung nữa
+      
       return 'success';
     } catch (err: any) {
       if (!err.message?.includes('429')) {
@@ -135,23 +124,20 @@ export function RealtimeCameraYolo() {
     }
   }, []);
 
-  // 🚀 VÒNG LẶP CHÍNH THỨC - DỰA TRÊN FPS MONG MUỐN
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
     
     const status = await captureAndDetect();
     
     if (loopRef.current) {
-      // Mặc định nghỉ đúng bằng thời gian cấu hình FPS
-      let sleepDelay = BASE_DELAY_MS; 
+      let sleepDelay = 1500; 
       
-      // Cơ chế bảo vệ: Đi chậm lại nếu có biến cố
       if (status === 'rate_limit') {
-        sleepDelay = 4000; // Dính 429 -> Nghỉ dài 4s cho server xả tải
+        sleepDelay = 4000; 
       } else if (status === 'error') {
-        sleepDelay = 3000; // Lỗi mạng -> Nghỉ 3s
+        sleepDelay = 3000; 
       } else if (status === 'busy') {
-        sleepDelay = 200; // Ảnh trước đang chạy -> Đợi xíu 0.2s rồi check lại
+        sleepDelay = 500; 
       }
       
       intervalRef.current = setTimeout(detectLoop, sleepDelay);
@@ -224,14 +210,13 @@ export function RealtimeCameraYolo() {
       setCameraActive(true);
       loopRef.current = true;
       
-      // Khởi động vòng lặp phân tích
       setTimeout(() => detectLoop(), 1000);
     }
   };
 
   useEffect(() => () => stopAny(), []);
 
-  // Lọc nhiễu
+  // Lọc nhiễu: Bỏ qua khung < 40% cho phần hiển thị chữ số
   const validDetections = realtimeDetections.filter(d => d.confidence >= 0.4);
 
   return (
@@ -244,11 +229,7 @@ export function RealtimeCameraYolo() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 rounded-lg text-xs font-mono text-slate-400 border border-slate-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              {TARGET_FPS} FPS TARGET
-            </div>
-
+            {/* Nút Gộp Vỉ bây giờ chỉ điều khiển thông báo Text bên bảng dữ liệu */}
             <button
               onClick={() => setGroupMode(!groupMode)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
@@ -307,6 +288,7 @@ export function RealtimeCameraYolo() {
               muted
               className={`w-full h-full object-contain ${cameraActive ? "" : "hidden"}`}
             />
+            {/* ĐÃ XÓA THẺ CANVAS RA KHỎI DOM (Không render khung vuông đè lên nữa) */}
 
             {cameraActive && (
               <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-[#0B1121]/80 px-2 py-1 rounded text-xs font-mono text-cyan-400 border border-cyan-500/20">
