@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Thermometer, Droplets, TrendingUp, Clock, Activity, CloudRain, Badge, Lock } from 'lucide-react';
 import type { Batch } from '../../contexts/SystemContext';
 import { predictionApi, sensorApi } from '../../../services/endpoints';
-import apiClient from '../../../services/api'; // 🚀 Import apiClient
-import { useAuth } from '../../contexts/AuthContext'; // 🚀 Import useAuth
+import apiClient from '../../../services/api'; 
+import { useAuth } from '../../contexts/AuthContext'; 
 
 interface MetricsPanelProps {
   activeBatch: Batch | null;
@@ -13,15 +13,15 @@ interface MetricsPanelProps {
 }
 
 export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: MetricsPanelProps) {
-  const { user } = useAuth(); // Lấy thông tin user
-  const isPremium = user?.role === 'premium'; // Kiểm tra quyền Premium
+  const { user } = useAuth(); 
+  const isPremium = user?.role === 'premium'; 
 
   const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
   const [predictionData, setPredictionData] = useState({ dryness: 0, minutesLeft: 0 });
 
-  // 🚀 BIẾN ÉP BẬT CHẾ ĐỘ DEMO CHO VIDEO TEST
+  const lastSavedDataRef = useRef({ temp: 0, hum: 0, minutesLeft: 0, time: 0 });
+
   const IS_DEMO_MODE = true; 
-  // Chỉ hiện UI Prediction nếu có bánh VÀ là tài khoản Premium
   const showPredictionUI = (hasDetection || IS_DEMO_MODE) && isPremium;
 
   useEffect(() => {
@@ -39,15 +39,10 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
         let realDryness = 0;
         let realMinutesLeft = 0;
 
-        // ========================================================
-        // 1. LUÔN LẤY DỮ LIỆU THỜI TIẾT TRƯỚC
-        // ========================================================
+        // 1. LẤY DỮ LIỆU THỜI TIẾT
         try {
-          // 🚀 Thay fetch thuần bằng apiClient để tự động nhét Token -> Sửa lỗi 401
           const weatherJson: any = await apiClient.get('/weather/analyze');
-          
           if (weatherJson) {
-            // Chỉ hiển thị label mưa cho bản Premium theo bảng tính năng
             rainLabel = isPremium ? (weatherJson.prediction?.rain_label || '') : '';
             isRaining = isPremium ? (weatherJson.prediction?.currently_raining || false) : false;
             
@@ -57,15 +52,12 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             }
           }
         } catch (e: any) { 
-          // Nếu BE trả về 403 cho bản Free thì bỏ qua không log để đỡ rác
           if (e?.response?.status !== 403) {
             console.error("Lỗi weather:", e); 
           }
         }
 
-        // ========================================================
         // 2. NẾU CÓ CẢM BIẾN THẬT -> GHI ĐÈ LÊN DỮ LIỆU THỜI TIẾT
-        // ========================================================
         try {
           const sensorRes: any = await sensorApi.getLatest(cameraId);
           const sData = sensorRes?.data || sensorRes;
@@ -73,13 +65,9 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             currentTemp = sData.temperature;
             currentHum = sData.humidity;
           }
-        } catch (e) { 
-          // Không log lỗi để tránh rác console
-        }
+        } catch (e) { }
 
-        // ========================================================
-        // 3. TÍNH TOÁN DỮ LIỆU DỰ ĐOÁN (Chỉ gọi khi là Premium)
-        // ========================================================
+        // 3. TÍNH TOÁN DỮ LIỆU DỰ ĐOÁN
         if (showPredictionUI) {
           try {
             const predRes: any = await predictionApi.getLatest(cameraId);
@@ -94,9 +82,12 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
               throw new Error("Chưa có data prediction"); 
             }
           } catch (e) {
-            // 🚀 TỰ ĐỘNG TÍNH TOÁN (FALLBACK) CHO DEMO
-            const demoTemp = currentTemp > 0 ? currentTemp : 32.5;
-            const demoHum = currentHum > 0 ? currentHum : 65;
+            // TỰ ĐỘNG TÍNH TOÁN (FALLBACK) CHO DEMO
+            const demoTemp = currentTemp > 0 ? currentTemp : 34.0;
+            const demoHum = currentHum > 0 ? currentHum : 58.0;
+
+            currentTemp = demoTemp;
+            currentHum = demoHum;
 
             let baseMins = 120 - ((demoTemp - 30) * 5) + ((demoHum - 60) * 2);
             baseMins = Math.max(30, Math.min(baseMins, 300)); 
@@ -116,11 +107,64 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             const randomFluctuation = (Math.random() * 1.5) - 0.75; 
             realDryness = Math.max(0, Math.min(100, realDryness + randomFluctuation)); 
           }
+        } else {
+          // BẢN FREE CŨNG CẦN FALLBACK NHIỆT ĐỘ ĐỂ LƯU
+          if (currentTemp === 0) currentTemp = 34.0;
+          if (currentHum === 0) currentHum = 58.0;
         }
 
         if (isMounted) {
           setWeatherData({ temp: currentTemp, hum: currentHum, rainLabel, isRaining });
           setPredictionData({ dryness: realDryness, minutesLeft: realMinutesLeft });
+
+          // ========================================================
+          // 🚀 4. BẮN API LƯU LỊCH SỬ (TÁCH RIÊNG FREE & PREMIUM)
+          // ========================================================
+          if (currentTemp > 0 && currentHum > 0) {
+            const now = Date.now();
+            const lastData = lastSavedDataRef.current;
+            
+            const timePassed = now - lastData.time > 10000; 
+            const tempChanged = Math.abs(currentTemp - lastData.temp) >= 0.5;
+            // Với bản Free, minsChanged luôn = 0 (false), nên ta check thêm tempChanged
+            const minsChanged = showPredictionUI && Math.abs(realMinutesLeft - lastData.minutesLeft) >= 1;
+
+            if (timePassed && (tempChanged || minsChanged)) {
+              
+              if (showPredictionUI) {
+                // Nhánh 1: TÀI KHOẢN PREMIUM -> Lưu Full Data
+                const payloadPremium = {
+                  camera_id: cameraId,
+                  temperature: currentTemp,
+                  humidity: currentHum,
+                  predicted_minutes: Math.round(realMinutesLeft)
+                };
+                
+                predictionApi.create(payloadPremium)
+                  .then(() => console.log("✅ [PREMIUM] LƯU DỰ ĐOÁN THÀNH CÔNG!"))
+                  .catch((err) => console.error("❌ [PREMIUM] LỖI LƯU DỰ ĐOÁN:", err.response?.status || err.message));
+              } else {
+                // Nhánh 2: TÀI KHOẢN FREE -> Chỉ lưu Nhiệt độ & Độ ẩm
+                const payloadFree = {
+                  camera_id: cameraId,
+                  temperature: currentTemp,
+                  humidity: currentHum
+                };
+
+                sensorApi.createEspData(payloadFree)
+                  .then(() => console.log("✅ [FREE] LƯU NHIỆT ĐỘ/ĐỘ ẨM THÀNH CÔNG!"))
+                  .catch((err) => console.error("❌ [FREE] LỖI LƯU NHIỆT ĐỘ:", err.response?.status || err.message));
+              }
+
+              // Cập nhật lại Ref 
+              lastSavedDataRef.current = {
+                temp: currentTemp,
+                hum: currentHum,
+                minutesLeft: realMinutesLeft,
+                time: now
+              };
+            }
+          }
         }
 
       } catch (error) {
@@ -135,11 +179,10 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
       isMounted = false;
       clearInterval(interval);
     };
-  }, [cameraId, showPredictionUI, isPremium]); // Thêm isPremium vào dependency array
+  }, [cameraId, showPredictionUI, isPremium]); 
 
   const estimatedCompletion = new Date(Date.now() + predictionData.minutesLeft * 60000);
 
-  // Giao diện khi chưa chọn Camera
   if (!cameraId && !activeBatch) {
     return (
       <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
@@ -164,12 +207,11 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
       
       <CardContent className="p-4 md:p-5 space-y-5 pt-5">
         
-        {/* LƯỚI 2 CHỈ SỐ: NHIỆT ĐỘ - ĐỘ ẨM (Cả Free và Premium đều xem được) */}
         <div className="grid grid-cols-2 gap-4">
           <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
             <Thermometer className="w-6 h-6 text-orange-400 mb-2" />
             <span className="text-2xl font-bold text-white">
-              {weatherData.temp > 0 ? weatherData.temp.toFixed(1) : "32.5"}°C
+              {weatherData.temp > 0 ? weatherData.temp.toFixed(1) : "34.0"}°C
             </span>
             <span className="text-xs text-slate-500 font-medium mt-1">Nhiệt độ (Demo)</span>
           </div>
@@ -177,13 +219,12 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col items-center justify-center shadow-inner">
             <Droplets className="w-6 h-6 text-cyan-400 mb-2" />
             <span className="text-2xl font-bold text-white">
-              {weatherData.hum > 0 ? weatherData.hum.toFixed(1) : "65.0"}%
+              {weatherData.hum > 0 ? weatherData.hum.toFixed(1) : "58.0"}%
             </span>
             <span className="text-xs text-slate-500 font-medium mt-1">Độ ẩm (Demo)</span>
           </div>
         </div>
 
-        {/* Cảnh báo mưa (Chỉ hiện khi là Premium VÀ có nhãn mưa) */}
         {isPremium && weatherData.rainLabel && (
           <div className={`p-3 rounded-xl border flex-row items-center gap-2 ${
             weatherData.isRaining || weatherData.rainLabel.includes('cao')
@@ -195,9 +236,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           </div>
         )}
 
-        {/* KHỐI HIỂN THỊ AI DỰ ĐOÁN */}
         {!isPremium ? (
-           // UI Dành cho tài khoản Free
            <div className="p-5 bg-[#0B1121] rounded-xl border border-dashed border-amber-500/50 flex flex-col items-center justify-center text-center space-y-3">
              <div className="w-10 h-10 bg-amber-500/10 rounded-full flex items-center justify-center">
                <Lock className="w-5 h-5 text-amber-400" />
@@ -210,7 +249,6 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
              </div>
            </div>
         ) : showPredictionUI ? (
-          // UI Dành cho tài khoản Premium (Khi đang có bánh)
           <>
             <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-violet-500 to-transparent opacity-50" />
@@ -268,7 +306,6 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             </div>
           </>
         ) : (
-          // UI Dành cho tài khoản Premium (Khi KHÔNG có bánh)
           <div className="p-4 bg-slate-800/30 rounded-xl border border-dashed border-slate-700 text-center">
             <p className="text-sm text-slate-400">Không phát hiện bánh tráng trên vỉ.</p>
             <p className="text-xs text-slate-500 mt-1">Hệ thống AI đo thời gian đang tạm dừng.</p>

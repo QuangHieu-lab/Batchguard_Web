@@ -26,6 +26,8 @@ export const cameraApi = {
 export const sensorApi = {
   getLatest: (cameraId: string) => apiClient.get(`/sensor/latest/${cameraId}`),
   getHistory: (cameraId: string, limit: number = 50) => apiClient.get(`/sensor/history/${cameraId}?limit=${limit}`),
+  createEspData: (data: { camera_id: string; temperature: number; humidity: number }) => 
+    apiClient.post('/iot/sensor-data', data),
 };
 
 // ============================================================================
@@ -35,7 +37,7 @@ export const detectionApi = {
   getLatest: (cameraId: string) => apiClient.get(`/detection/latest/${cameraId}`),
   // THÊM DÒNG NÀY ĐỂ PUSH DATA LÊN SERVER:
   create: (data: { camera_id: string; detected_count: number; confidence: number }) => 
-    apiClient.post('/detection', data),
+    apiClient.post('/iot/detection-result', data),
 };
 
 // ============================================================================
@@ -43,6 +45,8 @@ export const detectionApi = {
 // ============================================================================
 export const predictionApi = {
   getLatest: (cameraId: string) => apiClient.get(`/prediction/latest/${cameraId}`),
+  create: (data: { camera_id: string; temperature: number; humidity: number; predicted_minutes: number }) => 
+    apiClient.post('/iot/dryness-result', data),
 };
 
 // ============================================================================
@@ -78,6 +82,16 @@ export const userApi = {
   enableUser: (id: string) => apiClient.patch(`/users/${id}/enable`),
   updateUser: (id: string, data: any) => apiClient.put(`/users/${id}`, data),
   deleteUser: (id: string) => apiClient.delete(`/users/${id}`),
+};
+export const paymentApi = {
+  // Tạo đơn hàng mới (Lấy mã QR)
+  createOrder: () => apiClient.post('/payment/create-order'),
+  
+  // Kiểm tra trạng thái đơn hàng (Đã chuyển khoản chưa)
+  getStatus: () => apiClient.get('/payment/status'),
+  
+  // GHI CHÚ: Không đưa /payment/webhook vào đây vì Webhook là Server-to-Server, 
+  // do ngân hàng/SePay gọi thẳng vào Backend, Frontend không sử dụng.
 };
 export const voiceApi = {
   getAlert: (level: 'low' | 'medium' | 'high') => 
