@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Upload, Scan, Tag, Crosshair, AlertTriangle } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Upload, Scan, Tag, Crosshair, AlertTriangle, Crown, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext'; // Import hook kiểm tra user
 
 interface YoloUploadDemoProps {}
 
@@ -14,6 +17,8 @@ const CLASS_NAMES: Record<number, string> = {
   1: "Bánh tráng sữa",
   2: "Bánh tráng rách (Lỗi)",
 };
+
+const MAX_FREE_LIMIT = 10; // Giới hạn số lần của bản Free
 
 // ==========================================
 // 2. HÀM NÉN ẢNH TRƯỚC KHI UPLOAD
@@ -63,15 +68,33 @@ const compressImage = (file: File): Promise<File> => {
 };
 
 export function YoloUploadDemo({}: YoloUploadDemoProps) {
+  const navigate = useNavigate();
+  const { user } = useAuth(); // Lấy thông tin user hiện tại
+  const isPremium = user?.role === 'premium'; // Kiểm tra có phải Premium không
+
   const yoloFileInputRef = useRef<HTMLInputElement>(null);
   const [yoloPreviewUrl, setYoloPreviewUrl] = useState<string | null>(null);
   const [yoloLoading, setYoloLoading] = useState(false);
   const [yoloError, setYoloError] = useState<string | null>(null);
+  const [usageCount, setUsageCount] = useState(0); // State đếm số lần sử dụng
   const [yoloResult, setYoloResult] = useState<{
     count: number;
     detections: { label: string; confidence: number; bbox: number[] }[];
     imageUrl?: string;
   } | null>(null);
+
+  // Khởi tạo đếm lượt dùng cho tài khoản Free
+  useEffect(() => {
+    if (!isPremium) {
+      const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      const storedCount = localStorage.getItem(`yolo_usage_${today}`);
+      if (storedCount) {
+        setUsageCount(parseInt(storedCount, 10));
+      } else {
+        setUsageCount(0);
+      }
+    }
+  }, [isPremium]);
 
   // ==========================================
   // 3. XỬ LÝ UPLOAD VÀ GỌI API YOLO
@@ -80,22 +103,26 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
     const originalFile = e.target.files?.[0];
     if (!originalFile) return;
 
+    // 🚀 CHẶN NGAY TỪ CLIENT NẾU HẾT LƯỢT (FREE)
+    if (!isPremium && usageCount >= MAX_FREE_LIMIT) {
+      toast.error("Bạn đã dùng hết lượt quét miễn phí hôm nay!");
+      if (yoloFileInputRef.current) yoloFileInputRef.current.value = '';
+      return;
+    }
+
     setYoloLoading(true);
     setYoloError(null);
     setYoloResult(null);
     
     try {
-      // 1. Nén ảnh và tạo preview URL
       const compressedFile = await compressImage(originalFile);
       const previewUrl = URL.createObjectURL(compressedFile);
       setYoloPreviewUrl(previewUrl);
 
-      // 🚀 CHUYỂN ĐỔI FILE SANG BASE64 ĐỂ KHỚP VỚI BACKEND MỚI
       const base64String = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const rawDataUrl = reader.result as string;
-          // Cắt bỏ phần tiền tố "data:image/jpeg;base64,"
           const b64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
           resolve(b64);
         };
@@ -105,23 +132,31 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
       const API_BASE_URL = (import.meta as any).env?.VITE_AI_URL || 'https://huntrot-mylongai-backed-modelai.hf.space';
       let response: Response | null = null;
       
-      // 2. Gửi cho Python YOLO Server (Dùng JSON thay vì FormData)
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) {
           setYoloError(`Server AI báo bận... thử lại (${attempt}/2)`);
-          await new Promise(r => setTimeout(r, 4000)); // Chờ 4s nếu bị 429
+          await new Promise(r => setTimeout(r, 4000)); 
         }
         
-        // Trỏ vào cùng Endpoint Realtime vì chúng xài chung chuẩn Base64 JSON
+        // 🚀 Có thể cấu hình truyền Header Authorization ở đây nếu BE yêu cầu kiểm tra token
         response = await fetch(`${API_BASE_URL}/ai/detect-realtime`, { 
           method: 'POST', 
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            // "Authorization": `Bearer ${localStorage.getItem('access_token')}` // Bỏ comment nếu Backend tự check lượt
+          },
           body: JSON.stringify({ image: base64String }) 
         });
         
+        // Backend chém 403 do hết lượt Free
+        if (response.status === 403) {
+           setUsageCount(MAX_FREE_LIMIT); // Ép giới hạn
+           throw new Error("Bạn đã hết lượt quét miễn phí. Vui lòng nâng cấp Premium!");
+        }
+
         if (response.status === 429) {
           response = null;
-          continue; // Vòng lặp sẽ chạy lại và đợi 4s
+          continue; 
         }
         
         const ct = response?.headers.get('content-type') ?? '';
@@ -143,10 +178,16 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
       }));
       
       const detectedCount = detections.length;
-      
-      // 🚀 CHỈ LẤY DATA THỐNG KÊ: Hiển thị nguyên ảnh gốc, không vẽ thêm khung nữa
       setYoloResult({ count: detectedCount, detections, imageUrl: previewUrl });
       
+      // 🚀 NẾU THÀNH CÔNG VÀ LÀ BẢN FREE -> CỘNG THÊM 1 LƯỢT VÀO LOCAL STORAGE
+      if (!isPremium) {
+        const today = new Date().toISOString().split('T')[0];
+        const newCount = usageCount + 1;
+        setUsageCount(newCount);
+        localStorage.setItem(`yolo_usage_${today}`, newCount.toString());
+      }
+
       if (detectedCount > 0) {
         toast.success(`Đã phân tích xong! Phát hiện ${detectedCount} đối tượng.`);
       } else {
@@ -166,25 +207,55 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
   return (
     <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
       <CardHeader className="border-b border-slate-800 bg-[#151E2F]">
-        <CardTitle className="flex items-center gap-2 text-white">
-          <Crosshair className="w-5 h-5 text-orange-400" />
-          YOLO – Phát hiện đối tượng
+        <CardTitle className="flex items-center justify-between text-white">
+          <div className="flex items-center gap-2">
+            <Crosshair className="w-5 h-5 text-orange-400" />
+            YOLO – Phát hiện đối tượng
+          </div>
+          
+          {/* HIỂN THỊ TRẠNG THÁI GÓI VÀ SỐ LƯỢT */}
+          {isPremium ? (
+             <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0 shadow-[0_0_10px_rgba(245,158,11,0.3)] flex items-center gap-1.5">
+               <Crown className="w-3.5 h-3.5" /> Premium (Không giới hạn)
+             </Badge>
+          ) : (
+             <Badge className="bg-slate-800 text-slate-300 border border-slate-600">
+               Free: {usageCount}/{MAX_FREE_LIMIT} lượt hôm nay
+             </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div
-              onClick={() => yoloFileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-700 hover:border-orange-500/50 rounded-xl p-8 cursor-pointer transition-colors bg-[#0B1121] hover:bg-orange-500/5"
-            >
-              <Upload className="w-10 h-10 text-slate-600" />
-              <p className="text-sm text-slate-400">Click để upload ảnh</p>
-              <p className="text-xs text-slate-600">JPG, PNG, WEBP</p>
-              <input ref={yoloFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleYoloUpload} />
-            </div>
             
-            {/* Luôn hiển thị ảnh gốc sạch sẽ, không vẽ khung */}
+            {/* GIAO DIỆN UPLOAD HOẶC KHÓA UPLOAD */}
+            {!isPremium && usageCount >= MAX_FREE_LIMIT ? (
+              <div className="flex flex-col items-center justify-center gap-4 border-2 border-dashed border-amber-500/50 rounded-xl p-8 bg-amber-500/5 text-center">
+                <Crown className="w-12 h-12 text-amber-400 mb-2" />
+                <div>
+                  <h3 className="text-lg font-bold text-amber-400">Đã hết lượt quét miễn phí!</h3>
+                  <p className="text-sm text-slate-400 mt-1">Bạn đã dùng hết {MAX_FREE_LIMIT}/{MAX_FREE_LIMIT} lượt của ngày hôm nay.</p>
+                </div>
+                <Button 
+                  onClick={() => navigate('/dashboard/payment')} 
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold w-full md:w-auto shadow-lg shadow-amber-500/20"
+                >
+                  <Zap className="w-4 h-4 mr-2" /> Nâng Cấp Premium Ngay
+                </Button>
+              </div>
+            ) : (
+              <div
+                onClick={() => yoloFileInputRef.current?.click()}
+                className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-700 hover:border-orange-500/50 rounded-xl p-8 cursor-pointer transition-colors bg-[#0B1121] hover:bg-orange-500/5"
+              >
+                <Upload className="w-10 h-10 text-slate-600" />
+                <p className="text-sm text-slate-400">Click để upload ảnh</p>
+                <p className="text-xs text-slate-600">JPG, PNG, WEBP</p>
+                <input ref={yoloFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleYoloUpload} />
+              </div>
+            )}
+            
             {yoloPreviewUrl && (
               <img 
                 src={yoloPreviewUrl} 
@@ -196,8 +267,8 @@ export function YoloUploadDemo({}: YoloUploadDemoProps) {
           
           <div className="space-y-3">
             {yoloError && (
-              <div className="flex items-center gap-2 text-red-400 text-sm p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <div className="flex items-start gap-2 text-red-400 text-sm p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 {yoloError}
               </div>
             )}

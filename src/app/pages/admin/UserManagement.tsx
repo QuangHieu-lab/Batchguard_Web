@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '../../components/ui/table';
 import { 
-  Search, Shield, User, Activity, UserX, Edit, Trash2, Lock, Unlock, Loader2, X, AlertTriangle
+  Search, Shield, User, Activity, UserX, Edit, Trash2, Lock, Unlock, Loader2, X, AlertTriangle, Crown
 } from 'lucide-react';
 import { userApi } from '../../../services/endpoints';
 import { toast } from 'sonner';
@@ -49,11 +49,16 @@ export default function UserManagement() {
           u.disabled === true ||
           u.is_disabled === true;
         
+        // 🚀 CẬP NHẬT: Nhận diện role Premium
+        let mappedRole = 'customer';
+        if (u.role === 'admin') mappedRole = 'admin';
+        if (u.role === 'premium') mappedRole = 'premium';
+        
         return {
           id: u.id,
           name: u.full_name || u.name || 'Người dùng ẩn danh',
           email: u.email || '',
-          role: u.role === 'admin' ? 'admin' : 'customer', 
+          role: mappedRole, 
           status: isLocked ? 'inactive' : 'active',
           lastLogin: u.last_login || u.created_at || new Date().toISOString()
         };
@@ -100,7 +105,7 @@ export default function UserManagement() {
   };
 
   // ==========================================
-  // 🚀 XỬ LÝ SỬA NGƯỜI DÙNG CHUẨN
+  // XỬ LÝ SỬA NGƯỜI DÙNG CHUẨN
   // ==========================================
   const openEditModal = (user: any) => {
     setEditingUser(user);
@@ -113,8 +118,6 @@ export default function UserManagement() {
     try {
       setProcessingId(editingUser.id);
       
-      // Gọi API Sửa chuẩn (Đã xóa chữ 'any' vì bạn đã khai báo trong endpoints)
-      // Truyền cả name và full_name để Backend bắt trúng biến
       await (userApi as any).updateUser(editingUser.id, {
         name: editForm.name,
         full_name: editForm.name,
@@ -123,7 +126,7 @@ export default function UserManagement() {
       
       toast.success('Cập nhật thông tin thành công');
       setIsEditModalOpen(false);
-      fetchUsers(); // Tải lại danh sách mới
+      fetchUsers(); 
     } catch (error: any) {
       console.error("LỖI CẬP NHẬT USER:", error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Không thể cập nhật thông tin';
@@ -134,7 +137,7 @@ export default function UserManagement() {
   };
 
   // ==========================================
-  // 🚀 XỬ LÝ XÓA NGƯỜI DÙNG CHUẨN
+  // XỬ LÝ XÓA NGƯỜI DÙNG CHUẨN
   // ==========================================
   const openDeleteModal = (user: any) => {
     if (user.role === 'admin') {
@@ -149,12 +152,11 @@ export default function UserManagement() {
     try {
       setProcessingId(deletingUser.id);
       
-      // Gọi API Xóa chuẩn
       await (userApi as any).deleteUser(deletingUser.id);
       
       toast.success('Đã xóa người dùng khỏi hệ thống');
       setIsDeleteModalOpen(false);
-      fetchUsers(); // Tải lại danh sách mới
+      fetchUsers(); 
     } catch (error: any) {
       console.error("LỖI XÓA USER:", error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Không thể xóa người dùng này';
@@ -172,6 +174,7 @@ export default function UserManagement() {
   const activeUsers = users.filter(u => u.status === 'active').length;
   const inactiveUsers = users.filter(u => u.status === 'inactive').length;
   const adminUsers = users.filter(u => u.role === 'admin').length;
+  const premiumUsers = users.filter(u => u.role === 'premium').length; // 🚀 Đếm số lượng Premium
 
   return (
     <div className="p-8 space-y-6 relative">
@@ -183,8 +186,8 @@ export default function UserManagement() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Stats - Đã đổi thành lưới 5 cột */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -194,6 +197,21 @@ export default function UserManagement() {
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <User className="w-6 h-6 text-blue-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 🚀 THẺ THỐNG KÊ PREMIUM */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Gói Premium</p>
+                <p className="text-3xl font-bold text-amber-400 mt-2">{premiumUsers}</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                <Crown className="w-6 h-6 text-amber-400" />
               </div>
             </div>
           </CardContent>
@@ -293,11 +311,20 @@ export default function UserManagement() {
                         </div>
                       </TableCell>
                       <TableCell className="text-slate-300">{user.email}</TableCell>
+                      
+                      {/* 🚀 HIỂN THỊ BADGE ROLE */}
                       <TableCell>
-                        <Badge className={user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}>
-                          {user.role === 'admin' ? <><Shield className="w-3 h-3 mr-1" />Admin</> : <><User className="w-3 h-3 mr-1" />Khách hàng</>}
+                        <Badge className={
+                          user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 
+                          user.role === 'premium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                          'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        }>
+                          {user.role === 'admin' ? <><Shield className="w-3 h-3 mr-1" />Admin</> : 
+                           user.role === 'premium' ? <><Crown className="w-3 h-3 mr-1" />Premium</> : 
+                           <><User className="w-3 h-3 mr-1" />Khách hàng</>}
                         </Badge>
                       </TableCell>
+                      
                       <TableCell>
                         <Badge className={user.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}>
                           {user.status === 'active' ? <><span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>Hoạt động</> : <><Lock className="w-3 h-3 mr-1" />Bị Khóa</>}
@@ -374,7 +401,8 @@ export default function UserManagement() {
                   onChange={(e) => setEditForm({...editForm, role: e.target.value})}
                   className="w-full bg-[#151E2F] border border-slate-700 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-blue-500"
                 >
-                  <option value="customer">Khách hàng</option>
+                  <option value="customer">Khách hàng (Free)</option>
+                  <option value="premium">Khách hàng (Premium)</option>
                   <option value="admin">Quản trị viên (Admin)</option>
                 </select>
               </div>
