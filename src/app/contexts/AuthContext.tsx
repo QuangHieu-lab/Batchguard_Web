@@ -5,7 +5,7 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'customer' | 'producer' | 'disabled'; // Thêm disabled vào type để khỏi lỗi TS
+  role: 'admin' | 'customer' | 'producer' | 'premium' | 'disabled'; 
 }
 
 interface AuthContextType {
@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
+  refetchUser: () => Promise<void>; // 🚀 THÊM HÀM NÀY ĐỂ GỌI SAU KHI THANH TOÁN
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,32 +24,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Dời hàm logout lên đây để useEffect bên dưới có thể gọi được khi phát hiện user bị khóa
   const logout = () => {
     setUser(null);
     localStorage.removeItem('mylongai_user');
     localStorage.removeItem('access_token');
   };
 
-  // Check for existing session on mount
+  // 🚀 Tách riêng logic lấy Profile để tái sử dụng
+  const refetchUser = async () => {
+    try {
+      const storedUser = localStorage.getItem('mylongai_user');
+      if (!storedUser) return;
+
+      const profile: any = await authApi.getProfile();
+      
+      if (profile.role === 'disabled') {
+        logout(); 
+      } else {
+        // Lấy dữ liệu cũ, ghi đè role mới nhất từ API
+        const updatedUser = {
+          ...JSON.parse(storedUser),
+          role: profile.role
+        };
+        
+        // Lưu lại LocalStorage bản mới nhất
+        localStorage.setItem('mylongai_user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      }
+    } catch (error) {
+      console.error("Lỗi đồng bộ profile:", error);
+      // logout(); // Tùy chọn: Bạn có thể bật lại dòng này nếu muốn ép logout khi API sập
+    }
+  };
+
   useEffect(() => {
     const checkSession = async () => {
       const storedUser = localStorage.getItem('mylongai_user');
       const token = localStorage.getItem('access_token');
 
       if (storedUser && token) {
-        try {
-          // Gọi API để check xem user có đang bị admin khóa không
-          const profile: any = await authApi.getProfile();
-          
-          if (profile.role === 'disabled') {
-            logout(); // Bị admin khóa -> Xóa session
-          } else {
-            setUser(JSON.parse(storedUser));
-          }
-        } catch (error) {
-          logout(); // Token lỗi hoặc hết hạn -> Xóa session
-        }
+        // Nạp tạm dữ liệu cũ để giao diện load nhanh
+        setUser(JSON.parse(storedUser));
+        // Sau đó âm thầm gọi API đồng bộ lại Role mới nhất
+        await refetchUser();
       }
       setIsLoading(false);
     };
@@ -62,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response: any = await authApi.login({ email, password });
       
-      // 🚀 CHẶN NGAY TẠI ĐÂY NẾU ROLE BỊ KHÓA
       if (response.role === 'disabled') {
         throw new Error('Tài khoản của bạn đã bị khóa bởi Quản trị viên');
       }
@@ -74,14 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: response.role
       };
 
-      // Save token and user
       localStorage.setItem('access_token', response.access_token);
       localStorage.setItem('mylongai_user', JSON.stringify(loggedInUser));
 
       setUser(loggedInUser);
     } catch (error: any) {
       console.error('Login error:', error);
-      throw error; // Quăng lỗi ra để Login screen hiện thông báo
+      throw error; 
     } finally {
       setIsLoading(false);
     }
@@ -115,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        refetchUser, // 🚀 Cung cấp hàm này ra ngoài
       }}
     >
       {children}
