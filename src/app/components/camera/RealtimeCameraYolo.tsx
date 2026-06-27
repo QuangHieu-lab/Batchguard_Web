@@ -1,7 +1,11 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Camera, Scan, Tag, Crosshair, AlertTriangle, Upload, Video, LayoutGrid } from 'lucide-react';
+import { Camera, Scan, Tag, AlertTriangle, Upload, Video, LayoutGrid, Settings2, Percent } from 'lucide-react';
+
+// 🚀 IMPORT API CHUẨN
+import apiClient from '../../../services/api'; 
+import { detectionApi } from '../../../services/endpoints'; 
 
 const CLASS_NAMES: Record<number, string> = {
   0: "Bánh tráng mè đen",
@@ -20,6 +24,17 @@ export function RealtimeCameraYolo() {
   const isDetectingRef = useRef(false);
   const loopRef = useRef(false);
 
+  // ==========================================
+  // 🚀 STATE QUẢN LÝ PHẦN CỨNG WEBCAM
+  // ==========================================
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+
+  // ==========================================
+  // 🚀 STATE QUẢN LÝ CAMERA TRONG DATABASE
+  // ==========================================
+  const [selectedDbCamera, setSelectedDbCamera] = useState<string>('');
+
   const [cameraActive, setCameraActive] = useState(false);
   const [videoDemoUrl, setVideoDemoUrl] = useState<string | null>(null);
   const [realtimeDetections, setRealtimeDetections] = useState<{ label: string; confidence: number; bbox: number[] }[]>([]);
@@ -27,6 +42,41 @@ export function RealtimeCameraYolo() {
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [groupMode, setGroupMode] = useState(true);
+
+  // 🚀 KHỞI TẠO: LẤY DANH SÁCH WEBCAM & TỰ ĐỘNG LẤY DATABASE CAMERA
+  useEffect(() => {
+    // 1. Lấy danh sách phần cứng
+    const getHardwareCameras = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop()));
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        setAvailableCameras(videoDevices);
+        if (videoDevices.length > 0) setSelectedCameraId(videoDevices[0].deviceId);
+      } catch (err) {
+        console.warn("Không thể lấy danh sách Webcam", err);
+      }
+    };
+
+    // 2. Tự động lấy danh sách Camera từ Database và chốt ID đầu tiên
+    const getDatabaseCameras = async () => {
+      try {
+        const res: any = await apiClient.get('/camera');
+        const data = res?.data || res || [];
+        
+        if (Array.isArray(data) && data.length > 0) {
+          // Tự động chọn camera đầu tiên làm nơi lưu trữ mặc định
+          setSelectedDbCamera(data[0].id);
+        }
+      } catch (err) {
+        console.warn("Không thể tải danh sách Camera từ Database", err);
+      }
+    };
+
+    getHardwareCameras();
+    getDatabaseCameras();
+  }, []);
 
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     if (isDetectingRef.current) return 'busy';
@@ -108,9 +158,33 @@ export function RealtimeCameraYolo() {
         };
       });
       
-      setRealtimeDetections(dets.length > 0 ? dets : prev => prev);
+      const validDets = dets.filter(d => d.confidence >= 0.4);
+      const count = validDets.length;
       
-      // ĐÃ XÓA HÀM drawDetections() TẠI ĐÂY - AI chỉ lấy Data chứ không vẽ Khung nữa
+      const totalConf = validDets.reduce((sum, d) => sum + d.confidence, 0);
+      const avgConf = count > 0 ? (totalConf / count) : 0;
+
+      setRealtimeDetections(validDets.length > 0 ? validDets : prev => prev);
+
+      // 🚀 TỰ ĐỘNG GỌI API ĐỂ LƯU LÊN BẢNG /iot/detection-result
+      if (selectedDbCamera) {
+        try {
+          console.log("⏳ Đang tự động lưu dữ liệu YOLO lên Server...");
+          detectionApi.create({
+            camera_id: selectedDbCamera,
+            detected_count: count,
+            confidence: avgConf
+          })
+          .then(() => {
+            console.log("✅ LƯU DATABASE YOLO THÀNH CÔNG: ", count, "bánh");
+          })
+          .catch((err) => {
+            console.error("❌ LỖI LƯU DATABASE YOLO:", err.response?.status || err.message);
+          });
+        } catch (e) {
+          console.error("Lỗi code khi gọi detectionApi:", e);
+        }
+      }
       
       return 'success';
     } catch (err: any) {
@@ -122,7 +196,7 @@ export function RealtimeCameraYolo() {
       setIsScanning(false); 
       isDetectingRef.current = false; 
     }
-  }, []);
+  }, [selectedDbCamera]);
 
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
@@ -130,7 +204,7 @@ export function RealtimeCameraYolo() {
     const status = await captureAndDetect();
     
     if (loopRef.current) {
-      let sleepDelay = 1500; 
+      let sleepDelay = 2500; // Giãn thời gian chụp xuống 2.5s để DB không bị quá tải
       
       if (status === 'rate_limit') {
         sleepDelay = 4000; 
@@ -170,12 +244,20 @@ export function RealtimeCameraYolo() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (targetDeviceId?: string) => {
+    const deviceIdToUse = targetDeviceId || selectedCameraId;
     stopAny();
     setRealtimeError(null);
     setRealtimeLoading(true);
+    
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      const constraints = {
+        video: deviceIdToUse 
+          ? { deviceId: { exact: deviceIdToUse }, width: 640, height: 480 } 
+          : { width: 640, height: 480 }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -188,6 +270,16 @@ export function RealtimeCameraYolo() {
       setRealtimeError(err.message ?? "Không thể truy cập camera");
     } finally {
       setRealtimeLoading(false);
+    }
+  };
+
+  const handleCameraChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newDeviceId = e.target.value;
+    setSelectedCameraId(newDeviceId);
+    
+    if (cameraActive && !videoDemoUrl) {
+      stopAny();
+      setTimeout(() => startCamera(newDeviceId), 300);
     }
   };
 
@@ -216,20 +308,41 @@ export function RealtimeCameraYolo() {
 
   useEffect(() => () => stopAny(), []);
 
-  // Lọc nhiễu: Bỏ qua khung < 40% cho phần hiển thị chữ số
   const validDetections = realtimeDetections.filter(d => d.confidence >= 0.4);
+  const totalConfidence = validDetections.reduce((sum, d) => sum + d.confidence, 0);
+  const avgConfidence = validDetections.length > 0 ? (totalConfidence / validDetections.length) * 100 : 0;
 
   return (
     <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
       <CardHeader className="border-b border-slate-800 bg-[#151E2F]">
-        <CardTitle className="flex flex-col md:flex-row items-start md:items-center justify-between text-white gap-4">
+        <CardTitle className="flex flex-col xl:flex-row items-start xl:items-center justify-between text-white gap-4">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-cyan-400" />
             YOLO – Camera Realtime
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* Nút Gộp Vỉ bây giờ chỉ điều khiển thông báo Text bên bảng dữ liệu */}
+            
+            {/* 🚀 DROPDOWN 1: CHỌN NGUỒN WEBCAM PHẦN CỨNG (Vẫn giữ lại để chọn nguồn Video) */}
+            {availableCameras.length > 0 && !videoDemoUrl && (
+              <div className="flex items-center bg-[#0B1121] border border-slate-700 rounded-lg px-2 py-1" title="Chọn Webcam máy tính">
+                <Settings2 className="w-4 h-4 text-slate-400 mr-2" />
+                <select 
+                  value={selectedCameraId}
+                  onChange={handleCameraChange}
+                  className="bg-transparent text-sm font-medium text-cyan-400 focus:outline-none cursor-pointer max-w-[120px] truncate"
+                >
+                  {availableCameras.map((cam, idx) => (
+                    <option key={cam.deviceId} value={cam.deviceId} className="bg-[#151E2F] text-white">
+                      {cam.label || `Webcam ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Đã xóa Dropdown chọn Camera Database màu xanh lá */}
+
             <button
               onClick={() => setGroupMode(!groupMode)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
@@ -237,7 +350,7 @@ export function RealtimeCameraYolo() {
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
-              {groupMode ? "Thống kê theo Vỉ" : "Chi tiết từng Bánh"}
+              <span className="hidden sm:inline">{groupMode ? "Thống kê theo Vỉ" : "Chi tiết từng Bánh"}</span>
             </button>
 
             <input 
@@ -251,22 +364,22 @@ export function RealtimeCameraYolo() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={realtimeLoading}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 disabled:opacity-50`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 disabled:opacity-50`}
             >
               <Upload className="w-4 h-4" />
-              Upload Video
+              <span className="hidden sm:inline">Upload Video</span>
             </button>
 
             <button
-              onClick={cameraActive ? stopAny : startCamera}
+              onClick={() => cameraActive ? stopAny() : startCamera()}
               disabled={realtimeLoading}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${
                 cameraActive
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
-                  : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30"
+                  ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
+                  : "bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg shadow-cyan-500/20"
               } disabled:opacity-50`}
             >
-              {realtimeLoading ? "Đang kết nối..." : cameraActive ? "Dừng AI" : "Bật Webcam"}
+              {realtimeLoading ? "Đang kết nối..." : cameraActive ? "Dừng AI" : "Chạy AI Camera"}
             </button>
           </div>
         </CardTitle>
@@ -278,6 +391,7 @@ export function RealtimeCameraYolo() {
               <div className="text-center text-slate-600">
                 <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Bật Webcam hoặc Tải Video để bắt đầu giám sát</p>
+                <p className="text-xs text-emerald-500/70 mt-2 font-medium">Kết quả sẽ được tự động lưu vào Database hệ thống</p>
               </div>
             )}
             
@@ -288,7 +402,6 @@ export function RealtimeCameraYolo() {
               muted
               className={`w-full h-full object-contain ${cameraActive ? "" : "hidden"}`}
             />
-            {/* ĐÃ XÓA THẺ CANVAS RA KHỎI DOM (Không render khung vuông đè lên nữa) */}
 
             {cameraActive && (
               <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-[#0B1121]/80 px-2 py-1 rounded text-xs font-mono text-cyan-400 border border-cyan-500/20">
@@ -312,21 +425,34 @@ export function RealtimeCameraYolo() {
               </div>
             )}
             {cameraActive && (
-              <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800">
-                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Thông tin giám sát</p>
-                <div className="text-3xl font-bold text-cyan-400">
-                  {groupMode && validDetections.length >= 4 ? "1 Vỉ" : validDetections.length}
+              <div className="p-4 bg-[#0B1121] rounded-xl border border-slate-800 flex flex-col justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Thông tin giám sát</p>
+                  <div className="text-3xl font-bold text-cyan-400">
+                    {groupMode && validDetections.length >= 4 ? "1 Vỉ" : validDetections.length}
+                  </div>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {groupMode && validDetections.length >= 4 
+                      ? `Phát hiện 1 Vỉ Bánh Tráng (Gồm ${validDetections.length} bánh)` 
+                      : "đối tượng được tìm thấy"}
+                  </p>
                 </div>
-                <p className="text-sm text-slate-400 mt-1">
-                  {groupMode && validDetections.length >= 4 
-                    ? `Phát hiện 1 Vỉ Bánh Tráng (Gồm ${validDetections.length} bánh)` 
-                    : "đối tượng được tìm thấy"}
-                </p>
+
+                <div className="mt-4 pt-4 border-t border-slate-800/50 flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                    <Percent className="w-4 h-4 text-emerald-400" />
+                    Độ tin cậy AI:
+                  </div>
+                  <div className={`font-bold text-lg ${avgConfidence >= 80 ? 'text-emerald-400' : avgConfidence >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                    {validDetections.length > 0 ? `${avgConfidence.toFixed(1)}%` : "0%"}
+                  </div>
+                </div>
               </div>
             )}
+            
             {validDetections.length > 0 && !groupMode && (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider sticky top-0 bg-[#151E2F] py-1">Chi tiết ({validDetections.length})</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider sticky top-0 bg-[#151E2F] py-1 z-10">Chi tiết ({validDetections.length})</p>
                 {validDetections.map((d, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-[#0B1121] rounded-lg border border-slate-800">
                     <div className="flex items-center gap-2">

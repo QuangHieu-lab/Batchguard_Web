@@ -3,10 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { CheckCircle2, QrCode, AlertTriangle, Loader2, Zap, CreditCard, Copy, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-// 🚀 Sử dụng apiClient đã cấu hình sẵn
-import apiClient from '../../services/api'; 
+import { paymentApi, authApi } from '../../services/endpoints'; 
+import { useAuth } from '../contexts/AuthContext'; // 🚀 Import useAuth để lấy hàm refetchUser
 
 export default function UpgradePremium() {
+  // 🚀 Lấy hàm refetchUser từ Context để cập nhật quyền toàn hệ thống
+  const { refetchUser } = useAuth(); 
+
   const [order, setOrder] = useState<any>(null);
   const [isPaid, setIsPaid] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,13 +26,24 @@ export default function UpgradePremium() {
     setError(null);
 
     try {
-      const data = await apiClient.post('/payment/create-order');
+      // 🚀 BƯỚC 1: Lấy Profile HIỆN TẠI trước khi tạo đơn để biết ngày hết hạn cũ
+      const currentProfileRes: any = await authApi.getProfile();
+      const currentProfile = currentProfileRes?.data || currentProfileRes;
+      
+      // Bắt chuẩn tên biến đồng nghiệp yêu cầu
+      const initialExp = currentProfile?.premium_expired_at || null; 
+
+      // 🚀 BƯỚC 2: Tạo đơn hàng
+      const res: any = await paymentApi.createOrder();
+      const data = res?.data || res;
       setOrder(data);
-      startPolling();
+      
+      // Truyền ngày hết hạn cũ vào hàm Polling để làm mốc so sánh
+      startPolling(initialExp);
+      
     } catch (err: any) {
       if (err.response?.status === 400) {
-        toast.info('Tài khoản của bạn đã là Premium rồi!');
-        setIsPaid(true);
+        toast.info('Bạn đã có gói Premium đang hoạt động!');
       } else {
         setError(err.response?.data?.detail || err.message || "Lỗi hệ thống, không thể tạo đơn hàng.");
       }
@@ -39,15 +53,26 @@ export default function UpgradePremium() {
   };
 
   // ==============================================
-  // 2. POLLING: KIỂM TRA PROFILE 
+  // 2. POLLING: KIỂM TRA PROFILE CHỜ THANH TOÁN
   // ==============================================
-  const startPolling = () => {
+  const startPolling = (initialExp: string | null) => {
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const profile: any = await apiClient.get('/auth/profile');
-        if (profile.role === 'premium') {
+        const res: any = await authApi.getProfile();
+        const profile = res?.data || res;
+        const newExp = profile?.premium_expired_at || null;
+        
+        // 🚀 BƯỚC 3: CHECK ĐIỀU KIỆN ĐỒNG NGHIỆP YÊU CẦU
+        // Thành công = Role là Premium VÀ Ngày hết hạn phải KHÁC ngày hết hạn cũ
+        if (profile.role === 'premium' && newExp !== initialExp) {
           stopPolling();
           setIsPaid(true);
+          
+          // 🚀 BƯỚC 4: Ép toàn bộ App cập nhật lại quyền để mở khóa các tính năng ngay lập tức!
+          if (refetchUser) {
+            await refetchUser();
+          }
+
           toast.success("Thanh toán thành công! Chào mừng đến với gói Premium 🎉");
         }
       } catch (err) {
@@ -90,14 +115,14 @@ export default function UpgradePremium() {
             <div>
               <h2 className="text-3xl font-bold text-white">Nâng Cấp Thành Công!</h2>
               <p className="text-slate-400 max-w-md mx-auto mt-4 text-lg">
-                Tài khoản của bạn đã được kích hoạt gói Premium. Bây giờ bạn có thể trải nghiệm tất cả các tính năng cao cấp không giới hạn.
+                Tài khoản của bạn đã được kích hoạt gói Premium. Hệ thống đã cập nhật đặc quyền thành công.
               </p>
             </div>
             <button 
-              onClick={() => window.location.reload()} 
+              onClick={() => window.location.href = '/dashboard'} // Chuyển thẳng về Dashboard thay vì reload tại chỗ
               className="mt-8 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition-colors shadow-lg shadow-emerald-500/25"
             >
-              Trải nghiệm ngay
+              Về bảng điều khiển
             </button>
           </CardContent>
         </Card>
@@ -121,7 +146,6 @@ export default function UpgradePremium() {
           <CardContent className="p-8 flex-grow flex flex-col justify-center">
             <div className="grid md:grid-cols-2 gap-12 items-center">
               
-              {/* Cột trái: QR Code */}
               <div className="flex flex-col items-center space-y-6">
                 <div className="bg-white p-6 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.1)] relative">
                   <img src={order.qr_url} alt="QR thanh toán VietQR" className="w-64 h-64 object-contain" />
@@ -132,7 +156,6 @@ export default function UpgradePremium() {
                 </div>
               </div>
 
-              {/* Cột phải: Thông tin */}
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
@@ -191,12 +214,11 @@ export default function UpgradePremium() {
   }
 
   // ==============================================
-  // GIAO DIỆN 1: TRƯỚC KHI TẠO ĐƠN (LANDING MỞ RỘNG)
+  // GIAO DIỆN 1: TRƯỚC KHI TẠO ĐƠN
   // ==============================================
   return (
     <div className="h-full min-h-[calc(100vh-8rem)] flex items-center justify-center p-4">
       <Card className="w-full max-w-3xl flex flex-col border-slate-800 bg-[#0B1121] shadow-2xl overflow-hidden rounded-2xl min-h-[600px]">
-        {/* Header với dải màu theo chuẩn UI cũ */}
         <CardHeader className="bg-gradient-to-b from-[#1E293B] to-[#0B1121] border-b border-slate-800/50 py-8">
           <CardTitle className="text-white text-2xl md:text-3xl flex items-center justify-center gap-3 font-bold">
             <Zap className="w-8 h-8 text-purple-400" />
@@ -216,7 +238,6 @@ export default function UpgradePremium() {
             </div>
           )}
 
-          {/* Phần hiển thị mức giá khổng lồ */}
           <div className="flex flex-col items-center justify-center my-6">
             <span className="text-slate-500 uppercase tracking-widest text-sm font-semibold mb-3">Gói Premium Ưu Đãi</span>
             <div className="flex items-baseline gap-1">
@@ -226,11 +247,10 @@ export default function UpgradePremium() {
               <span className="text-3xl font-bold text-slate-300">đ</span>
             </div>
             <span className="text-emerald-400 font-medium mt-3 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">
-              Thanh toán một lần - Mở khóa mãi mãi
+              Thời hạn sử dụng: 01 Tháng
             </span>
           </div>
 
-          {/* Danh sách đặc quyền căn giữa, chữ to, icon rõ ràng */}
           <div className="flex justify-center my-8">
             <div className="space-y-4">
               <h3 className="font-semibold text-slate-200 text-lg mb-4 text-center">Đặc quyền tài khoản Premium:</h3>
@@ -259,7 +279,6 @@ export default function UpgradePremium() {
             </div>
           </div>
 
-          {/* Nút bấm dải màu chuẩn thiết kế */}
           <div className="mt-auto pt-6">
             <button
               onClick={handleUpgrade}
@@ -271,7 +290,7 @@ export default function UpgradePremium() {
               ) : (
                 <CreditCard className="w-6 h-6" />
               )}
-              {loading ? "Đang khởi tạo mã thanh toán..." : "Nâng Cấp Premium Ngay - 10.000đ"}
+              {loading ? "Đang khởi tạo mã thanh toán..." : "Nâng Cấp Premium (1 Tháng) - 10.000đ"}
             </button>
             <p className="text-center text-slate-500 text-sm mt-4">
               Giao dịch được mã hóa và bảo mật an toàn 100%
