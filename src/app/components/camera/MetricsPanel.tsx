@@ -52,9 +52,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
             }
           }
         } catch (e: any) { 
-          if (e?.response?.status !== 403) {
-            console.error("Lỗi weather:", e); 
-          }
+          if (e?.response?.status !== 403) console.error("Lỗi weather:", e); 
         }
 
         // 2. NẾU CÓ CẢM BIẾN THẬT -> GHI ĐÈ LÊN DỮ LIỆU THỜI TIẾT
@@ -67,48 +65,48 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           }
         } catch (e) { }
 
-        // 3. TÍNH TOÁN DỮ LIỆU DỰ ĐOÁN
+        // 3. TÍNH TOÁN DỮ LIỆU DỰ ĐOÁN (ĐÃ SỬA LỖI ĐÓNG BĂNG)
         if (showPredictionUI) {
-          try {
-            const predRes: any = await predictionApi.getLatest(cameraId);
-            const pData = predRes?.data || predRes;
+          // 🚀 Tắt việc lấy getLatest từ DB để tránh vòng lặp ghi đè số đếm ngược
+          
+          const demoTemp = currentTemp > 0 ? currentTemp : 34.0;
+          const demoHum = currentHum > 0 ? currentHum : 58.0;
 
-            if (pData && pData.predicted_minutes !== undefined) {
-              realMinutesLeft = pData.predicted_minutes;
-              realDryness = pData.dryness_percentage !== undefined 
-                ? pData.dryness_percentage 
-                : Math.max(0, Math.min(100, 100 - ((realMinutesLeft / 120) * 100)));
-            } else {
-              throw new Error("Chưa có data prediction"); 
-            }
-          } catch (e) {
-            // TỰ ĐỘNG TÍNH TOÁN (FALLBACK) CHO DEMO
-            const demoTemp = currentTemp > 0 ? currentTemp : 34.0;
-            const demoHum = currentHum > 0 ? currentHum : 58.0;
+          currentTemp = demoTemp;
+          currentHum = demoHum;
 
-            currentTemp = demoTemp;
-            currentHum = demoHum;
+          // Tính tổng thời gian cần phơi
+          let baseMins = 120 - ((demoTemp - 30) * 5) + ((demoHum - 60) * 2);
+          baseMins = Math.max(30, Math.min(baseMins, 300)); 
 
-            let baseMins = 120 - ((demoTemp - 30) * 5) + ((demoHum - 60) * 2);
-            baseMins = Math.max(30, Math.min(baseMins, 300)); 
-
-            const storageKey = `demo_start_time_${cameraId}`;
-            let savedStartTime = localStorage.getItem(storageKey);
-            
-            if (!savedStartTime) {
-              savedStartTime = Date.now().toString();
-              localStorage.setItem(storageKey, savedStartTime);
-            }
-
-            const elapsedMins = (Date.now() - parseInt(savedStartTime, 10)) / 60000;
-            realMinutesLeft = Math.max(0, baseMins - elapsedMins); 
-            realDryness = 100 - ((realMinutesLeft / baseMins) * 100);
-            
-            const randomFluctuation = (Math.random() * 1.5) - 0.75; 
-            realDryness = Math.max(0, Math.min(100, realDryness + randomFluctuation)); 
+          const storageKey = `demo_start_time_${cameraId}`;
+          let savedStartTime = localStorage.getItem(storageKey);
+          
+          if (!savedStartTime) {
+            savedStartTime = Date.now().toString();
+            localStorage.setItem(storageKey, savedStartTime);
           }
+
+          // 🚀 MẸO DEMO: TUA NHANH THỜI GIAN
+          // Set DEMO_SPEED = 1 nếu bạn muốn thời gian trôi đúng ngoài đời thật.
+          // Set DEMO_SPEED = 60 nghĩa là 1 giây trôi qua = 1 phút trong App (Để nhìn thấy thanh tiến độ chạy).
+          const DEMO_SPEED = 60; 
+          
+          const elapsedMins = ((Date.now() - parseInt(savedStartTime, 10)) / 60000) * DEMO_SPEED;
+          
+          realMinutesLeft = Math.max(0, baseMins - elapsedMins); 
+          realDryness = 100 - ((realMinutesLeft / baseMins) * 100);
+          
+          const randomFluctuation = (Math.random() * 1.5) - 0.75; 
+          realDryness = Math.max(0, Math.min(100, realDryness + randomFluctuation)); 
+
+          // Nếu phơi xong (100%), xóa giờ bắt đầu để lần sau reload nó đếm lại từ đầu
+          if (realMinutesLeft === 0) {
+            localStorage.removeItem(storageKey);
+            realDryness = 100;
+          }
+
         } else {
-          // BẢN FREE CŨNG CẦN FALLBACK NHIỆT ĐỘ ĐỂ LƯU
           if (currentTemp === 0) currentTemp = 34.0;
           if (currentHum === 0) currentHum = 58.0;
         }
@@ -117,22 +115,18 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
           setWeatherData({ temp: currentTemp, hum: currentHum, rainLabel, isRaining });
           setPredictionData({ dryness: realDryness, minutesLeft: realMinutesLeft });
 
-          // ========================================================
-          // 🚀 4. BẮN API LƯU LỊCH SỬ (TÁCH RIÊNG FREE & PREMIUM)
-          // ========================================================
+          // 4. BẮN API LƯU LỊCH SỬ (TÁCH RIÊNG FREE & PREMIUM)
           if (currentTemp > 0 && currentHum > 0) {
             const now = Date.now();
             const lastData = lastSavedDataRef.current;
             
-            const timePassed = now - lastData.time > 10000; 
+            const timePassed = now - lastData.time > 5000; // Giảm xuống 5s để đẩy DB liên tục cho mượt
             const tempChanged = Math.abs(currentTemp - lastData.temp) >= 0.5;
-            // Với bản Free, minsChanged luôn = 0 (false), nên ta check thêm tempChanged
             const minsChanged = showPredictionUI && Math.abs(realMinutesLeft - lastData.minutesLeft) >= 1;
 
             if (timePassed && (tempChanged || minsChanged)) {
               
               if (showPredictionUI) {
-                // Nhánh 1: TÀI KHOẢN PREMIUM -> Lưu Full Data
                 const payloadPremium = {
                   camera_id: cameraId,
                   temperature: currentTemp,
@@ -140,23 +134,17 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                   predicted_minutes: Math.round(realMinutesLeft)
                 };
                 
-                predictionApi.create(payloadPremium)
-                  .then(() => console.log("✅ [PREMIUM] LƯU DỰ ĐOÁN THÀNH CÔNG!"))
-                  .catch((err) => console.error("❌ [PREMIUM] LỖI LƯU DỰ ĐOÁN:", err.response?.status || err.message));
+                predictionApi.create(payloadPremium).catch(() => {});
               } else {
-                // Nhánh 2: TÀI KHOẢN FREE -> Chỉ lưu Nhiệt độ & Độ ẩm
                 const payloadFree = {
                   camera_id: cameraId,
                   temperature: currentTemp,
                   humidity: currentHum
                 };
 
-                sensorApi.createEspData(payloadFree)
-                  .then(() => console.log("✅ [FREE] LƯU NHIỆT ĐỘ/ĐỘ ẨM THÀNH CÔNG!"))
-                  .catch((err) => console.error("❌ [FREE] LỖI LƯU NHIỆT ĐỘ:", err.response?.status || err.message));
+                sensorApi.createEspData(payloadFree).catch(() => {});
               }
 
-              // Cập nhật lại Ref 
               lastSavedDataRef.current = {
                 temp: currentTemp,
                 hum: currentHum,
@@ -173,7 +161,8 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
     };
 
     fetchRealtimeData();
-    const interval = setInterval(fetchRealtimeData, 5000); 
+    // Chạy mỗi 1 giây để thanh tiến độ cập nhật siêu mượt
+    const interval = setInterval(fetchRealtimeData, 1000); 
     
     return () => {
       isMounted = false;
@@ -269,7 +258,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                 <div className="text-xs text-violet-400 font-medium animate-pulse">
                   {predictionData.minutesLeft > 0 
                     ? `Còn lại: ${Math.floor(predictionData.minutesLeft / 60)}h ${Math.round(predictionData.minutesLeft % 60)}p` 
-                    : 'Đang phân tích dữ liệu...'}
+                    : '🎉 Bánh đã khô hoàn toàn!'}
                 </div>
               </div>
             </div>
@@ -288,7 +277,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
               </div>
               <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-1000 ease-in-out"
+                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-300 ease-linear"
                   style={{ width: `${Math.round(predictionData.dryness)}%` }}
                 />
               </div>
@@ -301,7 +290,7 @@ export function MetricsPanel({ activeBatch, cameraId, hasDetection = false }: Me
                       ? "Đang khô nhanh (Tối ưu)"
                       : predictionData.dryness < 100 
                         ? "Sắp hoàn thành (Chuẩn bị thu hoạch)" 
-                        : "🎉 Bánh đã khô hoàn toàn!"}
+                        : "Sẵn sàng thu hoạch"}
               </div>
             </div>
           </>
