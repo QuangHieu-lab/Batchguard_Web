@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Camera, Wifi, WifiOff, Activity, RefreshCcw, User, PlayCircle } from 'lucide-react';
-import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
+import { Camera, Wifi, WifiOff, Activity, RefreshCcw, User, PlayCircle, Trash2 } from 'lucide-react';
 import { FarmSelector } from '../../components/admin/FarmSelector';
 import { useFarm } from '../../contexts/FarmContext';
 import { cameraApi, userApi } from '../../../services/endpoints';
@@ -17,17 +16,15 @@ export default function CameraMonitoring() {
   const fetchCameras = async () => {
     try {
       setLoading(true);
-      // Gọi song song API Camera và User để map chủ sở hữu
       const [cameraRes, userRes]: [any, any] = await Promise.all([
         cameraApi.getAll(),
-        userApi.getAll().catch(() => ({ data: [] })) // Tránh lỗi nếu userApi tạch
+        userApi.getAll().catch(() => ({ data: [] }))
       ]);
       
       const camerasData = cameraRes?.data || cameraRes || [];
       const usersData = userRes?.data || userRes || [];
 
       const formattedCameras = camerasData.map((c: any) => {
-        // Tìm tên chủ sở hữu camera
         const owner = usersData.find((u: any) => u.id === c.user_id);
         
         return {
@@ -35,11 +32,11 @@ export default function CameraMonitoring() {
           name: c.camera_name || c.name || 'Camera không tên',
           location: c.location || 'Chưa cập nhật vị trí',
           ownerName: owner ? (owner.full_name || owner.name) : 'Khách hàng ẩn danh',
-          status: c.status === 'offline' ? 'offline' : 'online', // Dùng data thật
-          farmId: c.user_id || 'FARM-01', // Đồng bộ farmId với user_id để FarmSelector có thể lọc
-          imageUrl: '', // Luồng RTSP không render trực tiếp bằng thẻ <img> được
+          status: c.status === 'offline' ? 'offline' : 'online',
+          farmId: c.user_id || 'FARM-01',
+          imageUrl: '', 
           streamUrl: c.stream_url || `rtsp://camera-${String(c.id).substring(0,6)}.mylong.vn/live`,
-          activeBatches: 0, // Đặt về 0 vì chưa có API cho Batch
+          activeBatches: 0, 
           lastUpdate: c.created_at || new Date().toISOString()
         };
       });
@@ -56,8 +53,30 @@ export default function CameraMonitoring() {
   useEffect(() => {
     fetchCameras();
   }, []);
+
+  const handleDeleteCamera = async (cameraId: string | number) => {
+    const isConfirm = window.confirm("Bạn có chắc chắn muốn xóa Camera này ra khỏi hệ thống không?");
+    if (!isConfirm) return;
+
+    try {
+      await cameraApi.delete(cameraId.toString()); 
+      toast.success('Đã xóa Camera thành công!');
+      setCameras(prevCameras => prevCameras.filter(c => c.id !== cameraId));
+    } catch (error) {
+      console.error('Lỗi khi xóa camera:', error);
+      toast.error('Xóa Camera thất bại. Vui lòng thử lại sau.');
+    }
+  };
+
+  // 🚀 HÀM XỬ LÝ KHI BẤM XEM CAMERA
+  const handlePlayStream = (cameraName: string, streamUrl: string) => {
+    // Trình duyệt không chạy được RTSP trực tiếp.
+    // Tạm thời hiển thị Toast thông báo đang xử lý luồng.
+    toast.info(`Đang kết nối đến ${cameraName}...`, {
+      description: `Đang giải mã luồng: ${streamUrl}`,
+    });
+  };
   
-  // Filter cameras by selected farm (Nếu selectedFarmId khớp với user_id)
   const filteredCameras = selectedFarmId 
     ? cameras.filter(c => c.farmId === selectedFarmId)
     : cameras;
@@ -138,26 +157,38 @@ export default function CameraMonitoring() {
             <CardHeader className="pb-3 border-b border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
                 <CardTitle className="text-lg text-white truncate pr-2">{camera.name}</CardTitle>
-                <Badge 
-                  className={
-                    camera.status === 'online' 
-                      ? 'bg-green-500/10 text-green-400 border-green-500/20 whitespace-nowrap' 
-                      : 'bg-red-500/10 text-red-400 border-red-500/20 whitespace-nowrap'
-                  }
-                >
-                  {camera.status === 'online' ? (
-                    <>
-                      <span className="inline-block w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-                      Online
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="w-3 h-3 mr-1" />
-                      Offline
-                    </>
-                  )}
-                </Badge>
+                
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    className={
+                      camera.status === 'online' 
+                        ? 'bg-green-500/10 text-green-400 border-green-500/20 whitespace-nowrap' 
+                        : 'bg-red-500/10 text-red-400 border-red-500/20 whitespace-nowrap'
+                    }
+                  >
+                    {camera.status === 'online' ? (
+                      <>
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
+                        Online
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="w-3 h-3 mr-1" />
+                        Offline
+                      </>
+                    )}
+                  </Badge>
+                  
+                  <button 
+                    onClick={() => handleDeleteCamera(camera.id)}
+                    className="p-1.5 rounded-md hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-colors"
+                    title="Xóa Camera này"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
               <div className="flex flex-col gap-1">
                 <p className="text-sm text-slate-400 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5" />
@@ -171,14 +202,20 @@ export default function CameraMonitoring() {
               <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
                 {camera.status === 'online' ? (
                   <>
-                    <PlayCircle className="w-12 h-12 text-white/20 hover:text-white/50 transition-colors cursor-pointer" />
+                    {/* 🚀 ĐÃ GẮN SỰ KIỆN ONCLICK VÀO ĐÂY */}
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center cursor-pointer group"
+                      onClick={() => handlePlayStream(camera.name, camera.streamUrl)}
+                    >
+                      <PlayCircle className="w-12 h-12 text-white/20 group-hover:text-white/80 group-hover:scale-110 transition-all duration-300" />
+                    </div>
                     
-                    <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-slate-700">
+                    <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-slate-700 pointer-events-none">
                       <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
                       <span className="text-[10px] font-bold text-white uppercase tracking-wider">LIVE</span>
                     </div>
 
-                    <div className="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] text-white/50 font-mono bg-black/40 px-2 py-1 rounded">
+                    <div className="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] text-white/50 font-mono bg-black/40 px-2 py-1 rounded pointer-events-none">
                       <span className="truncate pr-4">{camera.streamUrl}</span>
                       <span className="flex-shrink-0">H.264 / 30fps</span>
                     </div>
