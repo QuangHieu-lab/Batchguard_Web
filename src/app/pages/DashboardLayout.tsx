@@ -15,7 +15,7 @@ export default function DashboardLayout() {
     { path: '/dashboard/camera', icon: Camera, label: 'Camera quan sát', exact: true },
     { path: '/dashboard/weather', icon: Cloud, label: 'Thời tiết' },
     { path: '/dashboard/voice', icon: Volume2, label: 'Thông báo bằng giọng nói' },
-     { path: '/dashboard/payment', icon: CreditCard, label: 'Gói dịch vụ' },
+    { path: '/dashboard/payment', icon: CreditCard, label: 'Gói dịch vụ' },
   ];
 
   const isActive = (path: string, exact?: boolean) => {

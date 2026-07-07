@@ -1,11 +1,22 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Camera, Scan, Tag, AlertTriangle, Upload, Video, LayoutGrid, Settings2, Percent } from 'lucide-react';
+import { 
+  Camera, Scan, Tag, AlertTriangle, Upload, Video, LayoutGrid, Settings2, Percent,
+  Thermometer, Droplets, CloudRain, Lock, Clock, TrendingUp
+} from 'lucide-react';
 
-// 🚀 IMPORT API CHUẨN
 import apiClient from '../../../services/api'; 
 import { detectionApi } from '../../../services/endpoints'; 
+import { useAuth } from '../../contexts/AuthContext'; 
+
+// 🚀 1. THÊM cameraId VÀO PROPS
+interface RealtimeCameraYoloProps {
+  onYoloStateChange: React.Dispatch<React.SetStateAction<boolean>>;
+  isBackgroundActive: boolean;
+  onDataUpdate?: (data: { dryness: number; minutesLeft: number; hasDetection: boolean }) => void;
+  cameraId: string; 
+}
 
 const CLASS_NAMES: Record<number, string> = {
   0: "Bánh tráng mè đen",
@@ -13,9 +24,15 @@ const CLASS_NAMES: Record<number, string> = {
   2: "Bánh tráng rách (Lỗi)",
 };
 
+const AI_URL = 'https://huntrot-mylongai-backed-modelai.hf.space';
+
 type DetectStatus = 'success' | 'rate_limit' | 'error' | 'busy';
 
-export function RealtimeCameraYolo() {
+// 🚀 2. NHẬN cameraId TỪ CHA
+export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDataUpdate, cameraId }: RealtimeCameraYoloProps) {
+  const { user } = useAuth(); 
+  const isPremium = user?.role === 'premium';
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -23,17 +40,10 @@ export function RealtimeCameraYolo() {
   
   const isDetectingRef = useRef(false);
   const loopRef = useRef(false);
+  const hasDetectionRef = useRef(false); 
 
-  // ==========================================
-  // 🚀 STATE QUẢN LÝ PHẦN CỨNG WEBCAM
-  // ==========================================
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-
-  // ==========================================
-  // 🚀 STATE QUẢN LÝ CAMERA TRONG DATABASE
-  // ==========================================
-  const [selectedDbCamera, setSelectedDbCamera] = useState<string>('');
 
   const [cameraActive, setCameraActive] = useState(false);
   const [videoDemoUrl, setVideoDemoUrl] = useState<string | null>(null);
@@ -43,9 +53,10 @@ export function RealtimeCameraYolo() {
   const [isScanning, setIsScanning] = useState(false);
   const [groupMode, setGroupMode] = useState(true);
 
-  // 🚀 KHỞI TẠO: LẤY DANH SÁCH WEBCAM & TỰ ĐỘNG LẤY DATABASE CAMERA
+  const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
+  const [predictionData, setPredictionData] = useState({ dryness: 0, minutesLeft: 0 });
+
   useEffect(() => {
-    // 1. Lấy danh sách phần cứng
     const getHardwareCameras = async () => {
       try {
         await navigator.mediaDevices.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop()));
@@ -59,24 +70,100 @@ export function RealtimeCameraYolo() {
       }
     };
 
-    // 2. Tự động lấy danh sách Camera từ Database và chốt ID đầu tiên
-    const getDatabaseCameras = async () => {
+    getHardwareCameras();
+    // 🚀 ĐÃ XÓA hàm getDatabaseCameras() vì giờ đã lấy cameraId từ cha
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRealtimeData = async () => {
+      if (!cameraActive) return;
+
+      let currentTemp = 34.0;
+      let currentHum = 58.0;
+      let rainLabel = '';
+      let isRaining = false;
+      let realDryness = 0;
+      let realMinutesLeft = 0;
+
       try {
-        const res: any = await apiClient.get('/camera');
-        const data = res?.data || res || [];
+        const weatherRes: any = await apiClient.get('/weather/analyze');
+        const data = weatherRes?.data || weatherRes;
         
-        if (Array.isArray(data) && data.length > 0) {
-          // Tự động chọn camera đầu tiên làm nơi lưu trữ mặc định
-          setSelectedDbCamera(data[0].id);
+        if (data) {
+          currentTemp = data.sensor_data?.temperature_c || data.api_weather?.temperature_c || 34.0;
+          currentHum = data.sensor_data?.humidity_percent || data.api_weather?.humidity_percent || 58.0;
+          
+          if (isPremium && data.prediction) {
+            rainLabel = data.prediction.rain_label || '';
+            isRaining = data.prediction.currently_raining || false;
+          }
         }
-      } catch (err) {
-        console.warn("Không thể tải danh sách Camera từ Database", err);
+      } catch (e) {
+        console.warn("Không lấy được dữ liệu thời tiết:", e);
+      }
+
+      const showPredictionUI = hasDetectionRef.current && isPremium;
+      
+      if (showPredictionUI) {
+        let predictedMinutesFromAI = 120; 
+
+        try {
+          const calcTemp = currentTemp > 0 ? currentTemp : 34.0;
+          const calcHum = currentHum > 0 ? currentHum : 58.0;
+
+          const aiResponse = await fetch(`${AI_URL}/drying/predict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avg_temperature: calcTemp, avg_humidity: calcHum })
+          });
+          
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            if (aiData.predicted_drying_time) {
+              predictedMinutesFromAI = aiData.predicted_drying_time;
+            }
+          }
+        } catch (aiError) {
+          console.error("Lỗi khi gọi AI dự báo thời gian (YOLO):", aiError);
+        }
+
+        // 🚀 3. LƯU THỜI GIAN THEO ĐÚNG cameraId TỪ CHA TRUYỀN VÀO
+        const storageKey = `real_start_time_yolo_${cameraId || 'default'}`;
+        let savedStartTime = localStorage.getItem(storageKey);
+
+        if (!savedStartTime) {
+          savedStartTime = Date.now().toString();
+          localStorage.setItem(storageKey, savedStartTime);
+        }
+
+        const elapsedMins = (Date.now() - parseInt(savedStartTime, 10)) / 60000;
+
+        realMinutesLeft = Math.max(0, predictedMinutesFromAI - elapsedMins);
+        realDryness = 100 - ((realMinutesLeft / predictedMinutesFromAI) * 100);
+
+        if (realMinutesLeft <= 0) {
+          localStorage.removeItem(storageKey);
+          realDryness = 100;
+          realMinutesLeft = 0;
+        }
+      }
+
+      if (isMounted) {
+        setWeatherData({ temp: currentTemp, hum: currentHum, rainLabel, isRaining });
+        setPredictionData({ dryness: realDryness, minutesLeft: realMinutesLeft });
+        
+        onDataUpdate?.({ dryness: realDryness, minutesLeft: realMinutesLeft, hasDetection: hasDetectionRef.current });
       }
     };
 
-    getHardwareCameras();
-    getDatabaseCameras();
-  }, []);
+    fetchRealtimeData();
+    const interval = setInterval(fetchRealtimeData, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [cameraActive, isPremium, onDataUpdate, cameraId]); // 🚀 4. CẬP NHẬT DEPENDENCY LÀ cameraId
 
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     if (isDetectingRef.current) return 'busy';
@@ -116,9 +203,9 @@ export function RealtimeCameraYolo() {
       
       if (base64.length < 1000) return 'error';
 
-      const API_URL = 'https://huntrot-mylongai-backed-modelai.hf.space/ai/detect-realtime';
+      const DETECT_URL = `${AI_URL}/ai/detect-realtime`;
       
-      const res = await fetch(API_URL, {
+      const res = await fetch(DETECT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64 }),
@@ -165,18 +252,16 @@ export function RealtimeCameraYolo() {
       const avgConf = count > 0 ? (totalConf / count) : 0;
 
       setRealtimeDetections(validDets.length > 0 ? validDets : prev => prev);
+      
+      hasDetectionRef.current = validDets.length > 0; 
 
-      // 🚀 TỰ ĐỘNG GỌI API ĐỂ LƯU LÊN BẢNG /iot/detection-result
-      if (selectedDbCamera) {
+      // 🚀 5. GỬI DỮ LIỆU NHẬN DIỆN VỀ ĐÚNG ID CAMERA MÀ CHA TRUYỀN XUỐNG
+      if (cameraId) {
         try {
-          console.log("⏳ Đang tự động lưu dữ liệu YOLO lên Server...");
           detectionApi.create({
-            camera_id: selectedDbCamera,
+            camera_id: cameraId,
             detected_count: count,
             confidence: avgConf
-          })
-          .then(() => {
-            console.log("✅ LƯU DATABASE YOLO THÀNH CÔNG: ", count, "bánh");
           })
           .catch((err) => {
             console.error("❌ LỖI LƯU DATABASE YOLO:", err.response?.status || err.message);
@@ -196,7 +281,7 @@ export function RealtimeCameraYolo() {
       setIsScanning(false); 
       isDetectingRef.current = false; 
     }
-  }, [selectedDbCamera]);
+  }, [cameraId]); // 🚀 6. SỬA DEPENDENCY THÀNH cameraId
 
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
@@ -204,7 +289,7 @@ export function RealtimeCameraYolo() {
     const status = await captureAndDetect();
     
     if (loopRef.current) {
-      let sleepDelay = 2500; // Giãn thời gian chụp xuống 2.5s để DB không bị quá tải
+      let sleepDelay = 2500; 
       
       if (status === 'rate_limit') {
         sleepDelay = 4000; 
@@ -221,6 +306,7 @@ export function RealtimeCameraYolo() {
   const stopAny = () => {
     loopRef.current = false;
     isDetectingRef.current = false;
+    hasDetectionRef.current = false; 
     if (intervalRef.current) clearTimeout(intervalRef.current);
     
     if (streamRef.current) {
@@ -239,6 +325,7 @@ export function RealtimeCameraYolo() {
     setCameraActive(false);
     setRealtimeDetections([]);
     setRealtimeError(null);
+    onDataUpdate?.({ dryness: 0, minutesLeft: 0, hasDetection: false }); 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -266,6 +353,7 @@ export function RealtimeCameraYolo() {
       setCameraActive(true);
       loopRef.current = true;
       detectLoop();
+      onYoloStateChange(true);
     } catch (err: any) {
       setRealtimeError(err.message ?? "Không thể truy cập camera");
     } finally {
@@ -301,6 +389,7 @@ export function RealtimeCameraYolo() {
       
       setCameraActive(true);
       loopRef.current = true;
+      onYoloStateChange(true);
       
       setTimeout(() => detectLoop(), 1000);
     }
@@ -311,6 +400,8 @@ export function RealtimeCameraYolo() {
   const validDetections = realtimeDetections.filter(d => d.confidence >= 0.4);
   const totalConfidence = validDetections.reduce((sum, d) => sum + d.confidence, 0);
   const avgConfidence = validDetections.length > 0 ? (totalConfidence / validDetections.length) * 100 : 0;
+  
+  const estimatedCompletion = new Date(Date.now() + predictionData.minutesLeft * 60000);
 
   return (
     <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
@@ -322,8 +413,6 @@ export function RealtimeCameraYolo() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            
-            {/* 🚀 DROPDOWN 1: CHỌN NGUỒN WEBCAM PHẦN CỨNG (Vẫn giữ lại để chọn nguồn Video) */}
             {availableCameras.length > 0 && !videoDemoUrl && (
               <div className="flex items-center bg-[#0B1121] border border-slate-700 rounded-lg px-2 py-1" title="Chọn Webcam máy tính">
                 <Settings2 className="w-4 h-4 text-slate-400 mr-2" />
@@ -340,8 +429,6 @@ export function RealtimeCameraYolo() {
                 </select>
               </div>
             )}
-
-            {/* Đã xóa Dropdown chọn Camera Database màu xanh lá */}
 
             <button
               onClick={() => setGroupMode(!groupMode)}
@@ -371,7 +458,14 @@ export function RealtimeCameraYolo() {
             </button>
 
             <button
-              onClick={() => cameraActive ? stopAny() : startCamera()}
+              onClick={() => {
+                if (cameraActive) {
+                    stopAny();
+                    onYoloStateChange(false);
+                } else {
+                    startCamera();
+                }
+              }}
               disabled={realtimeLoading}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${
                 cameraActive
@@ -476,6 +570,74 @@ export function RealtimeCameraYolo() {
                 <p className="text-sm">Đang quét... Không có sản phẩm trên sân</p>
               </div>
             )}
+
+            {cameraActive && (
+              <div className="bg-[#0B1121] rounded-xl border border-slate-800 shadow-inner p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-[#151E2F] rounded-lg border border-slate-800/50 flex flex-col items-center justify-center">
+                    <Thermometer className="w-5 h-5 text-orange-400 mb-1" />
+                    <span className="text-xl font-bold text-white">{weatherData.temp > 0 ? weatherData.temp.toFixed(1) : "34.0"}°C</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-medium mt-1">Nhiệt độ</span>
+                  </div>
+                  <div className="p-3 bg-[#151E2F] rounded-lg border border-slate-800/50 flex flex-col items-center justify-center">
+                    <Droplets className="w-5 h-5 text-cyan-400 mb-1" />
+                    <span className="text-xl font-bold text-white">{weatherData.hum > 0 ? weatherData.hum.toFixed(1) : "58.0"}%</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-medium mt-1">Độ ẩm</span>
+                  </div>
+                </div>
+
+                {isPremium && weatherData.rainLabel && (
+                  <div className={`p-2.5 rounded-lg border flex-row items-center gap-2 ${
+                    weatherData.isRaining || weatherData.rainLabel.includes('cao')
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' 
+                      : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                  }`}>
+                    <CloudRain className="w-4 h-4 inline-block mr-2" />
+                    <span className="text-sm font-bold">{weatherData.rainLabel}</span>
+                  </div>
+                )}
+
+                {!isPremium ? (
+                  <div className="p-4 bg-[#151E2F] rounded-lg border border-dashed border-amber-500/50 flex flex-col items-center justify-center text-center">
+                    <Lock className="w-5 h-5 text-amber-400 mb-2" />
+                    <h4 className="text-amber-400 font-bold text-sm">Gói Premium</h4>
+                    <p className="text-xs text-slate-400 mt-1">Mở khóa để xem AI dự báo thời gian khô.</p>
+                  </div>
+                ) : hasDetectionRef.current ? (
+                  <div className="space-y-3 pt-2 border-t border-slate-800/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-violet-400" />
+                        <span className="text-sm font-medium text-slate-400">Dự kiến thu hoạch</span>
+                      </div>
+                      <span className="text-lg font-bold text-violet-400">
+                        {predictionData.minutesLeft > 0 ? estimatedCompletion.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" /> Độ khô hiện tại
+                        </span>
+                        <span className="text-sm font-bold text-emerald-400">{Math.round(predictionData.dryness)}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-300 ease-linear"
+                          style={{ width: `${Math.round(predictionData.dryness)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-800/30 rounded-lg border border-dashed border-slate-700 text-center">
+                    <p className="text-xs text-slate-400">AI chưa phát hiện bánh trên sân.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       </CardContent>
