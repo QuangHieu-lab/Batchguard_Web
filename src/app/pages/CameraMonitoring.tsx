@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Activity, Plus } from "lucide-react";
 import { useSystem } from "../contexts/SystemContext";
 import { useWeather } from "../hooks/useWeather";
-import { cameraApi, detectionApi } from "../../services/endpoints";
+import { cameraApi, detectionApi, predictionApi, sensorApi } from "../../services/endpoints"; // 🚀 IMPORT THÊM predictionApi & sensorApi
 import { toast } from "sonner";
 import { MultiCameraView, CameraData } from "../components/MultiCameraView"; 
 import { MetricsPanel } from "../components/camera/MetricsPanel";
@@ -20,6 +20,12 @@ export default function CameraMonitoring() {
   const [cameras, setCameras] = useState<CameraData[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isYoloActive, setIsYoloActive] = useState(false);
+  
+  // 🚀 STATE HỨNG DỮ LIỆU TỪ METRICS PANEL
+  const [latestMetrics, setLatestMetrics] = useState({ temp: 34.0, hum: 58.0, minutesLeft: 0, dryness: 0 });
+
+  const isBackgroundDetecting = cameras.find(c => c.id === selectedCameraId)?.hasDetection || false;
 
   const fetchCameras = async () => {
     try {
@@ -45,7 +51,38 @@ export default function CameraMonitoring() {
     fetchCameras();
   }, []);
 
+  // 🚀 HÀM LƯU SNAPSHOT VÀO DATABASE KHI ẤN CHỌN CAMERA
+  const captureAndSaveLog = async (cameraId: string) => {
+    try {
+      // Lấy nhanh sensor hiện tại để log chính xác nhất có thể
+      let temp = latestMetrics.temp;
+      let hum = latestMetrics.hum;
+      try {
+        const sensorRes: any = await sensorApi.getLatest(cameraId);
+        if (sensorRes?.data?.temperature) {
+          temp = sensorRes.data.temperature;
+          hum = sensorRes.data.humidity;
+        }
+      } catch (e) {}
+
+      await predictionApi.create({
+        camera_id: cameraId,
+        temperature: temp,
+        humidity: hum,
+        predicted_minutes: Math.round(latestMetrics.minutesLeft || 0)
+      });
+      console.log("📸 Đã lưu Log Database cho Camera:", cameraId);
+    } catch (error) {
+      console.error("Không thể lưu log khi chọn camera:", error);
+    }
+  };
+
   const handleAddNewCamera = async (newCamData: any) => {
+    if (isYoloActive) {
+      toast.error("Không thể thêm Camera khi hệ thống AI YOLO đang hoạt động!");
+      return;
+    }
+
     try {
       const res: any = await cameraApi.create({
         name: newCamData.name,
@@ -53,7 +90,13 @@ export default function CameraMonitoring() {
       });
       if (res.success) {
         toast.success('Thêm camera thành công');
-        fetchCameras();
+        await fetchCameras();
+        
+        // 🚀 TỰ ĐỘNG CHUYỂN SANG CAMERA VỪA TẠO VÀ LƯU LOG
+        if (res.data && res.data.id) {
+          setSelectedCameraId(res.data.id);
+          captureAndSaveLog(res.data.id);
+        }
       }
     } catch (error) {
       toast.error('Thêm camera thất bại');
@@ -82,20 +125,21 @@ export default function CameraMonitoring() {
     }
   };
 
-  // 🚀 Tích hợp API Detection thật
+  // 🚀 Tích hợp API Detection thật (Polling Nền)
   useEffect(() => {
     if (cameras.length === 0) return;
     
     let isMounted = true;
     
     const checkDetectionsReal = async () => {
+      if (isYoloActive) return;
+
       const updatedPromises = cameras.map(async (cam) => {
         try {
           const res: any = await detectionApi.getLatest(cam.id);
           const data = res?.data || res;
           
-          // Kiểm tra xem có nhận diện được bánh tráng hay không
-          const hasDet = data?.has_detection || (data?.objects && data.objects.length > 0) || false;
+          const hasDet = data?.has_detection || (data?.objects && data.objects.length > 0) || (data?.detected_count > 0) || false;
           
           return { ...cam, hasDetection: hasDet };
         } catch (e) { 
@@ -110,17 +154,22 @@ export default function CameraMonitoring() {
       }
     };
 
-    // Chạy ngay lần đầu
     checkDetectionsReal();
-    
-    // Polling mỗi 10 giây
     const intervalId = setInterval(checkDetectionsReal, 10000);
     
     return () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [cameras.length]);
+  }, [cameras.length, isYoloActive]); 
+
+  const handleYoloDataUpdate = (data: { dryness: number; minutesLeft: number; hasDetection: boolean }) => {
+    if (selectedCameraId) {
+      setCameras(prev => prev.map(c => 
+        c.id === selectedCameraId ? { ...c, hasDetection: data.hasDetection } : c
+      ));
+    }
+  };
 
   return (
     <div className="p-4 md:p-8 space-y-6 text-slate-200">
@@ -140,8 +189,18 @@ export default function CameraMonitoring() {
         
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)] font-medium"
+            onClick={() => {
+              if (isYoloActive) {
+                toast.error("Vui lòng tắt YOLO AI trước khi thêm Camera!");
+              } else {
+                setIsAddModalOpen(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+              isYoloActive 
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed border border-slate-600' 
+                : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+            }`}
           >
             <Plus className="w-4 h-4" /> Thêm Camera
           </button>
@@ -157,7 +216,10 @@ export default function CameraMonitoring() {
       <MultiCameraView 
         cameras={cameras}
         selectedCamera={selectedCameraId}
-        onSelectCamera={setSelectedCameraId}
+        onSelectCamera={(id) => {
+          setSelectedCameraId(id);
+          captureAndSaveLog(id); // 🚀 LƯU LOG KHI ẤN CHỌN CAMERA
+        }}
         onDeleteCamera={handleDeleteCamera}
       />
 
@@ -167,11 +229,19 @@ export default function CameraMonitoring() {
           activeBatch={activeBatch} 
           cameraId={selectedCameraId} 
           hasDetection={cameras.find(c => c.id === selectedCameraId)?.hasDetection || false} 
+          isYoloActive={isYoloActive}
+          onMetricsUpdate={setLatestMetrics} // 🚀 HỨNG DỮ LIỆU TỪ METRICS PANEL
         />
       </div>
 
       {/* 🚀 TÍNH NĂNG AI YOLO */}
-      <RealtimeCameraYolo />
+      <RealtimeCameraYolo 
+        onYoloStateChange={setIsYoloActive}
+        isBackgroundActive={isBackgroundDetecting}
+        onDataUpdate={handleYoloDataUpdate} 
+        cameraId={selectedCameraId} // 🚀 ĐÃ BỔ SUNG cameraId VÀO ĐÂY
+      />
+      
       <YoloUploadDemo />
     </div>
   );
