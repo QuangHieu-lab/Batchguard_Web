@@ -312,18 +312,31 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         'Content-Type': 'application/json'
       };
 
-      // 🚀 2. THÊM BẢO MẬT TURN SERVER BẰNG BIẾN MÔI TRƯỜNG
+      // ====================================================================
+      // 🚀 BẢN VÁ LỖI PRODUCTION: Khởi tạo WebRTC an toàn không dùng URL rỗng
+      // ====================================================================
+      const turnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
+      const turnUser = (import.meta as any).env?.VITE_TURN_SERVER_USER;
+      const turnCred = (import.meta as any).env?.VITE_TURN_SERVER_CRED;
+
+      const iceServersConfig: RTCIceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+
+      // Chỉ thêm TURN nếu có URL thực sự
+      if (turnUrl && turnUrl.trim() !== "") {
+        iceServersConfig.push({
+          urls: turnUrl,
+          username: turnUser || "",
+          credential: turnCred || "",
+        });
+      }
+
       const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          {
-            urls: (import.meta as any).env?.VITE_TURN_SERVER_URL || "",
-            username: (import.meta as any).env?.VITE_TURN_SERVER_USER || "",
-            credential: (import.meta as any).env?.VITE_TURN_SERVER_CRED || "",
-          }
-        ]
+        iceServers: iceServersConfig,
       });
+      // ====================================================================
       pcRef.current = pc;
 
       pc.oniceconnectionstatechange = () => {
@@ -358,7 +371,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         }
       });
 
-      // 🚀 3. GỬI BODY KHÔNG KÈM MÃ CAMERA_ID
+      // 🚀 3. GỬI BODY KHÔNG KÈM MÃ CAMERA_ID (KHỚP V1 SERVER)
       const response = await fetch(`${signalUrl}/api/view/offer`, {
         method: 'POST',
         headers: fetchHeaders,
