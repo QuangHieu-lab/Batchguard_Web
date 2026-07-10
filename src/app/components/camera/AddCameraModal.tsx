@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { X, Camera, Link, MapPin, Save } from 'lucide-react';
+import { X, Camera, MapPin, Save } from 'lucide-react';
 
 interface AddCameraModalProps {
   isOpen: boolean;
@@ -12,7 +12,6 @@ export function AddCameraModal({ isOpen, onClose, onAdd }: AddCameraModalProps) 
   const [formData, setFormData] = useState({
     name: '',
     location: '',
-    streamUrl: '',
   });
 
   // Nếu modal không mở thì không render gì cả
@@ -26,7 +25,7 @@ export function AddCameraModal({ isOpen, onClose, onAdd }: AddCameraModalProps) 
     
     // Đóng modal và reset form
     onClose();
-    setFormData({ name: '', location: '', streamUrl: '' });
+    setFormData({ name: '', location: '' });
   };
 
   return (
@@ -85,25 +84,6 @@ export function AddCameraModal({ isOpen, onClose, onAdd }: AddCameraModalProps) 
                   className="w-full pl-10 pr-4 py-2.5 bg-[#1e293b] border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 placeholder:text-slate-600"
                 />
               </div>
-            </div>
-
-            {/* Link Stream */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Luồng Stream (URL/RTSP) <span className="text-red-400">*</span></label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Link className="w-4 h-4 text-slate-500" />
-                </div>
-                <input 
-                  type="url" 
-                  required
-                  placeholder="VD: http://192.168.1.100:8080/video"
-                  value={formData.streamUrl}
-                  onChange={e => setFormData({...formData, streamUrl: e.target.value})}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#1e293b] border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 placeholder:text-slate-600"
-                />
-              </div>
-              <p className="text-xs text-slate-500">Hỗ trợ các định dạng RTSP, HTTP MJPEG, hoặc HLS.</p>
             </div>
 
             {/* Nút Hành Động */}
