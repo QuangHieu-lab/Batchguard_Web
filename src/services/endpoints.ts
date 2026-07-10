@@ -89,7 +89,7 @@ export const paymentApi = {
   
   // Kiểm tra trạng thái đơn hàng (Đã chuyển khoản chưa)
   getStatus: () => apiClient.get('/payment/status'),
-  
+  getBuyers: () => apiClient.get('/payment/buyers'),
   // GHI CHÚ: Không đưa /payment/webhook vào đây vì Webhook là Server-to-Server, 
   // do ngân hàng/SePay gọi thẳng vào Backend, Frontend không sử dụng.
 };
