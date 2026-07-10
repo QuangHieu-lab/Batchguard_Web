@@ -1,17 +1,168 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Camera, Wifi, WifiOff, Activity, RefreshCcw, User, PlayCircle, Trash2 } from 'lucide-react';
+import { Camera, Wifi, WifiOff, Activity, RefreshCcw, User, PlayCircle, Trash2, StopCircle } from 'lucide-react';
 import { FarmSelector } from '../../components/admin/FarmSelector';
 import { useFarm } from '../../contexts/FarmContext';
 import { cameraApi, userApi } from '../../../services/endpoints';
 import { toast } from 'sonner';
 
+// ============================================================================
+// 🚀 COMPONENT TRẠM THU PHÁT WEBRTC (Giống hệt bên MultiCameraView)
+// ============================================================================
+const WebRtcVideoPlayer = ({ cameraId, className }: { cameraId: string, className: string }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [statusMessage, setStatusText] = useState('Đang khởi tạo...');
+
+  useEffect(() => {
+    let isMounted = true;
+    const signalUrl = (import.meta as any).env?.VITE_WEBRTC_SIGNAL_URL || 'https://camera-relay-v1.onrender.com';
+    const fetchHeaders = { 'Content-Type': 'application/json' }; // Tạm bỏ JWT khớp V1
+
+    const cleanUpWebrtc = () => {
+      if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+      if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+      if (videoRef.current) { videoRef.current.srcObject = null; }
+    };
+
+    const establishWebRtc = async () => {
+      cleanUpWebrtc();
+      if (isMounted) {
+        setConnectionStatus('loading');
+        setStatusText('Đang kiểm tra trạm...');
+      }
+
+      try {
+        const statusRes = await fetch(`${signalUrl}/api/status`);
+        if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`);
+        const statusData = await statusRes.json();
+
+        if (!statusData.camera_live) {
+          if (isMounted) {
+            setConnectionStatus('offline');
+            setStatusText('Chưa có luồng từ xưởng...');
+          }
+          pollTimerRef.current = setInterval(async () => {
+            try {
+              const r = await fetch(`${signalUrl}/api/status`);
+              const d = await r.json();
+              if (d.camera_live && isMounted) {
+                clearInterval(pollTimerRef.current!);
+                establishWebRtc();
+              }
+            } catch (e) {}
+          }, 3000);
+          return;
+        }
+
+        if (isMounted) setStatusText('Đang kết nối P2P...');
+
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+                urls: (import.meta as any).env?.VITE_TURN_SERVER_URL || "",
+                username: (import.meta as any).env?.VITE_TURN_SERVER_USER || "",
+                credential: (import.meta as any).env?.VITE_TURN_SERVER_CRED || "",
+            }
+          ],
+        });
+        pcRef.current = pc;
+
+        pc.ontrack = (event) => {
+          if (event.track.kind === 'video' && videoRef.current && isMounted) {
+            setConnectionStatus('online');
+            videoRef.current.srcObject = event.streams[0] || new MediaStream([event.track]);
+            videoRef.current.play().catch(() => {});
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          if (!isMounted) return;
+          if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+            establishWebRtc();
+          }
+        };
+
+        pc.addTransceiver('video', { direction: 'recvonly' });
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        await new Promise<void>((resolve) => {
+            if (pc.iceGatheringState === 'complete') resolve();
+            else pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve(); };
+        });
+
+        const response = await fetch(`${signalUrl}/api/view/offer`, {
+          method: 'POST',
+          headers: fetchHeaders,
+          body: JSON.stringify({
+            sdp: pc.localDescription?.sdp,
+            type: pc.localDescription?.type
+          }),
+        });
+
+        if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+        const answer = await response.json();
+
+        if (pc.signalingState === 'closed') return;
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+      } catch (err: any) {
+        if (isMounted) {
+          setConnectionStatus('offline');
+          setStatusText('Máy chủ bận (Đợi 10s)...');
+        }
+        setTimeout(() => { if (isMounted) establishWebRtc(); }, 10000);
+      }
+    };
+
+    establishWebRtc();
+    return () => { isMounted = false; cleanUpWebrtc(); };
+  }, [cameraId]); 
+
+  return (
+    <div className={`relative w-full h-full bg-[#0B1121] overflow-hidden ${className}`}>
+      {connectionStatus === 'loading' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-4 text-center z-10 bg-black/80">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-2" />
+          <p className="text-[10px] font-mono">{statusMessage}</p>
+        </div>
+      )}
+      {connectionStatus === 'offline' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4 text-center z-10 bg-black/80">
+          <WifiOff className="w-8 h-8 text-slate-700 mb-2" />
+          <p className="text-[10px] font-medium text-slate-400">{statusMessage}</p>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        autoPlay muted playsInline crossOrigin="anonymous"
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-0 ${
+          connectionStatus === 'online' ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+    </div>
+  );
+};
+
+
+// ============================================================================
+// 🚀 GIAO DIỆN CHÍNH
+// ============================================================================
 export default function CameraMonitoring() {
   const { selectedFarmId } = useFarm();
   const [cameras, setCameras] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  // 🚀 STATE QUẢN LÝ CAMERA ĐANG ĐƯỢC PHÁT (TRÁNH QUÁ TẢI SERVER)
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
 
   const fetchCameras = async () => {
     try {
@@ -26,7 +177,6 @@ export default function CameraMonitoring() {
 
       const formattedCameras = camerasData.map((c: any) => {
         const owner = usersData.find((u: any) => u.id === c.user_id);
-        
         return {
           id: c.id,
           name: c.camera_name || c.name || 'Camera không tên',
@@ -62,21 +212,22 @@ export default function CameraMonitoring() {
       await cameraApi.delete(cameraId.toString()); 
       toast.success('Đã xóa Camera thành công!');
       setCameras(prevCameras => prevCameras.filter(c => c.id !== cameraId));
+      if (activeStreamId === cameraId) setActiveStreamId(null);
     } catch (error) {
       console.error('Lỗi khi xóa camera:', error);
       toast.error('Xóa Camera thất bại. Vui lòng thử lại sau.');
     }
   };
 
-  // 🚀 HÀM XỬ LÝ KHI BẤM XEM CAMERA
-  const handlePlayStream = (cameraName: string, streamUrl: string) => {
-    // Trình duyệt không chạy được RTSP trực tiếp.
-    // Tạm thời hiển thị Toast thông báo đang xử lý luồng.
-    toast.info(`Đang kết nối đến ${cameraName}...`, {
-      description: `Đang giải mã luồng: ${streamUrl}`,
-    });
+  const handlePlayStream = (cameraId: string, cameraName: string) => {
+    toast.success(`Đã kết nối WebRTC tới ${cameraName}`);
+    setActiveStreamId(cameraId);
   };
   
+  const handleStopStream = () => {
+    setActiveStreamId(null);
+  };
+
   const filteredCameras = selectedFarmId 
     ? cameras.filter(c => c.farmId === selectedFarmId)
     : cameras;
@@ -153,7 +304,7 @@ export default function CameraMonitoring() {
       {/* Camera Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredCameras.map((camera) => (
-          <Card key={camera.id} className="bg-slate-900 border-slate-800 overflow-hidden">
+          <Card key={camera.id} className={`bg-slate-900 border-slate-800 overflow-hidden transition-all ${activeStreamId === camera.id ? 'ring-2 ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : ''}`}>
             <CardHeader className="pb-3 border-b border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
                 <CardTitle className="text-lg text-white truncate pr-2">{camera.name}</CardTitle>
@@ -202,22 +353,36 @@ export default function CameraMonitoring() {
               <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
                 {camera.status === 'online' ? (
                   <>
-                    {/* 🚀 ĐÃ GẮN SỰ KIỆN ONCLICK VÀO ĐÂY */}
-                    <div 
-                      className="absolute inset-0 flex items-center justify-center cursor-pointer group"
-                      onClick={() => handlePlayStream(camera.name, camera.streamUrl)}
-                    >
-                      <PlayCircle className="w-12 h-12 text-white/20 group-hover:text-white/80 group-hover:scale-110 transition-all duration-300" />
-                    </div>
-                    
-                    <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-slate-700 pointer-events-none">
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">LIVE</span>
-                    </div>
+                    {/* 🚀 LOGIC HIỂN THỊ: Nếu đang xem thì render WebRTC, nếu không thì render Nút Play */}
+                    {activeStreamId === camera.id ? (
+                      <>
+                        <WebRtcVideoPlayer cameraId={camera.id} className="" />
+                        <button 
+                          onClick={handleStopStream}
+                          className="absolute top-3 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/80 hover:bg-red-500 text-white backdrop-blur-sm border border-red-600 transition-all cursor-pointer"
+                        >
+                          <StopCircle className="w-4 h-4" />
+                          <span className="text-[10px] font-bold">DỪNG XEM</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div 
+                          className="absolute inset-0 flex items-center justify-center cursor-pointer group bg-slate-900/50 hover:bg-blue-900/20 transition-all"
+                          onClick={() => handlePlayStream(camera.id, camera.name)}
+                        >
+                          <PlayCircle className="w-12 h-12 text-white/50 group-hover:text-blue-400 group-hover:scale-110 transition-all duration-300" />
+                        </div>
+                        <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-slate-700 pointer-events-none">
+                          <div className="w-2 h-2 rounded-full bg-slate-500"></div>
+                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">SẴN SÀNG</span>
+                        </div>
+                      </>
+                    )}
 
-                    <div className="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] text-white/50 font-mono bg-black/40 px-2 py-1 rounded pointer-events-none">
+                    <div className="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] text-white/50 font-mono bg-black/40 px-2 py-1 rounded pointer-events-none z-10">
                       <span className="truncate pr-4">{camera.streamUrl}</span>
-                      <span className="flex-shrink-0">H.264 / 30fps</span>
+                      <span className="flex-shrink-0">WebRTC</span>
                     </div>
                   </>
                 ) : (

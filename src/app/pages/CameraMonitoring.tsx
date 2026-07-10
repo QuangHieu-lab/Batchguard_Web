@@ -1,18 +1,15 @@
 import { useState, useEffect } from "react";
-import { Activity, Plus } from "lucide-react";
+import { Activity, Plus, BrainCircuit } from "lucide-react";
 import { useSystem } from "../contexts/SystemContext";
-import { useWeather } from "../hooks/useWeather";
-import { cameraApi, detectionApi, predictionApi, sensorApi } from "../../services/endpoints"; // 🚀 IMPORT THÊM predictionApi & sensorApi
+import { cameraApi, detectionApi, predictionApi, sensorApi } from "../../services/endpoints"; 
 import { toast } from "sonner";
 import { MultiCameraView, CameraData } from "../components/MultiCameraView"; 
-import { MetricsPanel } from "../components/camera/MetricsPanel";
 import { YoloUploadDemo } from "../components/camera/YoloUploadDemo";
 import { RealtimeCameraYolo } from "../components/camera/RealtimeCameraYolo";
 import { AddCameraModal } from "../components/camera/AddCameraModal";
 
 export default function CameraMonitoring() {
   const { activeBatch } = useSystem();
-  const { currentWeather } = useWeather();
 
   // ===============================================
   // 🚀 STATE QUẢN LÝ CAMERA 
@@ -22,8 +19,8 @@ export default function CameraMonitoring() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isYoloActive, setIsYoloActive] = useState(false);
   
-  // 🚀 STATE HỨNG DỮ LIỆU TỪ METRICS PANEL
-  const [latestMetrics, setLatestMetrics] = useState({ temp: 34.0, hum: 58.0, minutesLeft: 0, dryness: 0 });
+  // 🚀 STATE HỨNG DỮ LIỆU TỪ TRẠM YOLO ĐỂ LƯU LOG
+  const [latestMetrics, setLatestMetrics] = useState({ minutesLeft: 0, dryness: 0 });
 
   const isBackgroundDetecting = cameras.find(c => c.id === selectedCameraId)?.hasDetection || false;
 
@@ -54,9 +51,10 @@ export default function CameraMonitoring() {
   // 🚀 HÀM LƯU SNAPSHOT VÀO DATABASE KHI ẤN CHỌN CAMERA
   const captureAndSaveLog = async (cameraId: string) => {
     try {
-      // Lấy nhanh sensor hiện tại để log chính xác nhất có thể
-      let temp = latestMetrics.temp;
-      let hum = latestMetrics.hum;
+      let temp = 34.0;
+      let hum = 58.0;
+      
+      // Ưu tiên lấy nhiệt độ thực tế từ cảm biến
       try {
         const sensorRes: any = await sensorApi.getLatest(cameraId);
         if (sensorRes?.data?.temperature) {
@@ -84,6 +82,7 @@ export default function CameraMonitoring() {
     }
 
     try {
+      // API hiện tại đã bỏ đi trường streamUrl, chỉ cần name và location
       const res: any = await cameraApi.create({
         name: newCamData.name,
         location: newCamData.location
@@ -163,7 +162,10 @@ export default function CameraMonitoring() {
     };
   }, [cameras.length, isYoloActive]); 
 
+  // 🚀 HỨNG DỮ LIỆU TỪ TRẠM YOLO ĐỂ CẬP NHẬT TRẠNG THÁI
   const handleYoloDataUpdate = (data: { dryness: number; minutesLeft: number; hasDetection: boolean }) => {
+    setLatestMetrics({ minutesLeft: data.minutesLeft, dryness: data.dryness });
+    
     if (selectedCameraId) {
       setCameras(prev => prev.map(c => 
         c.id === selectedCameraId ? { ...c, hasDetection: data.hasDetection } : c
@@ -181,7 +183,7 @@ export default function CameraMonitoring() {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Camera Quan Sát</h1>
           <p className="text-sm md:text-base text-slate-400">Theo dõi tất cả vị trí phơi bánh real-time</p>
@@ -223,26 +225,21 @@ export default function CameraMonitoring() {
         onDeleteCamera={handleDeleteCamera}
       />
 
-      {/* 🚀 CHỈ SỐ MÔI TRƯỜNG & AI PREDICT */}
-      <div className="space-y-6">
-        <MetricsPanel 
-          activeBatch={activeBatch} 
+      {/* 🚀 TRẠM PHÂN TÍCH AI WEBRTC */}
+      <div id="ai-station" className="pt-6 border-t border-slate-800/50 space-y-6 mt-8">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <BrainCircuit className="w-6 h-6 text-cyan-400" /> Phân Tích Thông Minh (AI)
+        </h2>
+        
+        <RealtimeCameraYolo 
+          onYoloStateChange={setIsYoloActive}
+          isBackgroundActive={isBackgroundDetecting}
+          onDataUpdate={handleYoloDataUpdate} 
           cameraId={selectedCameraId} 
-          hasDetection={cameras.find(c => c.id === selectedCameraId)?.hasDetection || false} 
-          isYoloActive={isYoloActive}
-          onMetricsUpdate={setLatestMetrics} // 🚀 HỨNG DỮ LIỆU TỪ METRICS PANEL
         />
+        
+        <YoloUploadDemo />
       </div>
-
-      {/* 🚀 TÍNH NĂNG AI YOLO */}
-      <RealtimeCameraYolo 
-        onYoloStateChange={setIsYoloActive}
-        isBackgroundActive={isBackgroundDetecting}
-        onDataUpdate={handleYoloDataUpdate} 
-        cameraId={selectedCameraId} // 🚀 ĐÃ BỔ SUNG cameraId VÀO ĐÂY
-      />
-      
-      <YoloUploadDemo />
     </div>
   );
 }

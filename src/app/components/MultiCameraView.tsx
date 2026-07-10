@@ -1,17 +1,15 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Camera, Eye, Trash2 } from 'lucide-react'; 
-import { useSystem } from '../contexts/SystemContext';
+import { Camera, Trash2, WifiOff } from 'lucide-react';
 
-// Khai báo kiểu dữ liệu Camera
 export interface CameraData {
   id: string;
   name: string;
   zone: string;
-  status: 'active' | 'offline';
+  status: 'active' | 'offline' | 'inactive'; 
   hasDetection: boolean;
-  url?: string; 
+  streamUrl?: string; 
 }
 
 interface MultiCameraViewProps {
@@ -21,45 +19,221 @@ interface MultiCameraViewProps {
   onDeleteCamera: (id: string) => void;
 }
 
-// 🚀 COMPONENT BẤT TỬ: Ép trình duyệt luôn tải và phát video lặp lại vô hạn
-const AutoPlayVideo = ({ src, className }: { src: string, className: string }) => {
+// 🚀 COMPONENT TRẠM THU PHÁT WEBRTC CHUYÊN DỤNG TRÊN WEB
+const WebRtcVideoPlayer = ({ cameraId, className }: { cameraId: string, className: string }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [statusMessage, setStatusText] = useState('Đang khởi tạo...');
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load();
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => console.warn("Trình duyệt tạm chặn autoplay:", e));
+    let isMounted = true;
+    
+    // 🚀 LẤY URL TRẠM WEBRTC TỪ ENV
+    const signalUrl = (import.meta as any).env?.VITE_WEBRTC_SIGNAL_URL || 'https://camera-relay-v1.onrender.com';
+    
+    // Tạm thời bỏ JWT Headers để khớp với file HTML test chạy thành công (V1 Server)
+    const fetchHeaders = {
+      'Content-Type': 'application/json'
+    };
+
+    console.log(`🔗 Khởi tạo WebRTC (Phiên bản khớp HTML Test) cho Camera [${cameraId}] qua trạm:`, signalUrl);
+
+    const cleanUpWebrtc = () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
       }
-    }
-  }, [src]);
+      if (pcRef.current) {
+        pcRef.current.close();
+        pcRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+
+    const establishWebRtc = async () => {
+      cleanUpWebrtc();
+      if (isMounted) {
+        setConnectionStatus('loading');
+        setStatusText('Đang kiểm tra kết nối trạm...');
+      }
+
+      try {
+        // 1. Kiểm tra trạng thái camera (Giống file HTML)
+        const statusRes = await fetch(`${signalUrl}/api/status`);
+        if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`);
+        
+        const statusData = await statusRes.json();
+
+        // Nếu camera chưa live, vào chế độ chờ (polling 3s)
+        if (!statusData.camera_live) {
+          if (isMounted) {
+            setConnectionStatus('offline');
+            setStatusText('Camera tại xưởng chưa đẩy luồng. Đang chờ...');
+          }
+          pollTimerRef.current = setInterval(async () => {
+            try {
+              const r = await fetch(`${signalUrl}/api/status`);
+              const d = await r.json();
+              if (d.camera_live && isMounted) {
+                clearInterval(pollTimerRef.current!);
+                establishWebRtc();
+              }
+            } catch (e) {}
+          }, 3000);
+          return;
+        }
+
+        if (isMounted) setStatusText('Đang thiết lập kết nối ngang hàng (Peer-to-Peer)...');
+
+        // 2. Tạo đối tượng WebRTC (Bảo mật TURN Server bằng biến môi trường)
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+                urls: (import.meta as any).env?.VITE_TURN_SERVER_URL || "",
+                username: (import.meta as any).env?.VITE_TURN_SERVER_USER || "",
+                credential: (import.meta as any).env?.VITE_TURN_SERVER_CRED || "",
+            }
+          ],
+        });
+        pcRef.current = pc;
+
+        // 3. Đăng ký nhận luồng video và Ép Phát (Giống file HTML)
+        pc.ontrack = (event) => {
+          if (event.track.kind === 'video' && videoRef.current && isMounted) {
+            console.log("✅ Đã nhận được luồng Video từ Xưởng!");
+            setConnectionStatus('online');
+            const stream = event.streams[0] || new MediaStream([event.track]);
+            videoRef.current.srcObject = stream;
+            
+            // Ép video phát để vượt qua chính sách Autoplay của trình duyệt
+            videoRef.current.play().catch(err => {
+                console.warn(`Autoplay warning: ${err.message}.`);
+            });
+          }
+        };
+
+        // 4. Theo dõi vòng đời kết nối
+        pc.onconnectionstatechange = () => {
+          if (!isMounted) return;
+          const state = pc.connectionState;
+          console.log(`⚡ Trạng thái ICE WebRTC: ${state}`);
+          
+          if (['failed', 'disconnected', 'closed'].includes(state)) {
+            console.warn(`⚠️ WebRTC [${cameraId}] bị ngắt, đang thiết lập lại...`);
+            establishWebRtc();
+          }
+        };
+
+        // 5. Thêm cấu hình chỉ nhận video
+        pc.addTransceiver('video', { direction: 'recvonly' });
+
+        // 6. Tạo lời mời (Offer SDP)
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // Đợi ICE Gathering hoàn tất (Cách của HTML test)
+        await new Promise<void>((resolve) => {
+            if (pc.iceGatheringState === 'complete') {
+                resolve();
+            } else {
+                pc.onicegatheringstatechange = () => {
+                    console.log(`ICE Gathering state: ${pc.iceGatheringState}`);
+                    if (pc.iceGatheringState === 'complete') resolve();
+                };
+            }
+        });
+
+        // 7. Gửi Offer lên Server (Bỏ camera_id để khớp với cấu trúc Server V1 hiện tại)
+        const response = await fetch(`${signalUrl}/api/view/offer`, {
+          method: 'POST',
+          headers: fetchHeaders,
+          body: JSON.stringify({
+            sdp: pc.localDescription?.sdp,
+            type: pc.localDescription?.type
+          }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server returned HTTP ${response.status}`);
+        }
+
+        const answer = await response.json();
+
+        // Chặn lỗi Race Condition (Đường ống bị đóng trước khi set data)
+        if (pc.signalingState === 'closed') {
+            console.warn(`⚠️ Đường ống WebRTC đã đóng trước khi nhận Answer SDP. Bỏ qua.`);
+            return;
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+      } catch (err: any) {
+        console.error(`❌ Lỗi kết nối WebRTC [${cameraId}]:`, err.message);
+        if (isMounted) {
+          setConnectionStatus('offline');
+          setStatusText('Máy chủ đang khởi động hoặc từ chối truy cập (Đợi 30s)...');
+        }
+        setTimeout(() => { if (isMounted) establishWebRtc(); }, 10000);
+      }
+    };
+
+    establishWebRtc();
+
+    return () => {
+      isMounted = false;
+      cleanUpWebrtc();
+    };
+  }, [cameraId]); 
 
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      autoPlay
-      loop
-      muted
-      playsInline
-      className={className}
-    />
+    <div className="relative w-full h-full bg-[#0B1121] rounded-lg overflow-hidden border border-slate-800">
+      
+      {/* Giao diện Loading */}
+      {connectionStatus === 'loading' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-4 text-center z-10">
+          <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-xs font-mono">{statusMessage}</p>
+        </div>
+      )}
+
+      {/* Giao diện Lỗi / Offline */}
+      {connectionStatus === 'offline' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4 text-center z-10">
+          <WifiOff className="w-10 h-10 text-slate-700 mb-2" />
+          <p className="text-xs font-medium text-slate-400">{statusMessage}</p>
+        </div>
+      )}
+
+      {/* THẺ VIDEO LUÔN TỒN TẠI */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        crossOrigin="anonymous"
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-0 ${
+          connectionStatus === 'online' ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+    </div>
   );
 };
 
-export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: MultiCameraViewProps) {
-  const { isDetecting } = useSystem();
 
+// 🚀 COMPONENT GIAO DIỆN CHÍNH MULTI CAMERA
+export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: MultiCameraViewProps) {
   const selectedCam = cameras.find(c => c.id === selectedCamera) || cameras[0];
 
   if (!selectedCam) return null; 
 
   return (
     <div className="space-y-6">
-      {/* ======================================= */}
-      {/* CAMERA GRID VIEW (CÁC KHUNG NHỎ) */}
-      {/* ======================================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {cameras.map((camera) => (
           <Card
@@ -85,15 +259,13 @@ export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDel
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    camera.status === 'active' ? 'bg-emerald-500/10' : 'bg-slate-700/50'
-                  }`}>
-                    <Camera className={`w-4 h-4 ${
-                      camera.status === 'active' ? 'text-emerald-400' : 'text-slate-500'
-                    }`} />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800">
+                    <Camera className="w-4 h-4 text-cyan-400" />
                   </div>
                   <div>
-                    <CardTitle className="text-sm text-white">{camera.id}</CardTitle>
+                    <CardTitle className="text-sm text-white truncate max-w-[120px]" title={camera.name}>
+                      {camera.name}
+                    </CardTitle>
                   </div>
                 </div>
                 {camera.status === 'active' && (
@@ -102,159 +274,57 @@ export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDel
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-0 space-y-3">
-              
-              {/* MINI CAMERA FEED */}
-              <div className="relative aspect-video bg-[#0B1121] rounded-lg overflow-hidden border border-slate-800">
-                {camera.status === 'active' ? (
-                  <>
-                    {/* 🚀 ĐÃ SỬA: Luôn luôn gắn file /video_test.mp4 vào khung nhỏ */}
-                    <AutoPlayVideo 
-                      src={camera.url || "/video_test.mp4"} 
-                      className="absolute inset-0 w-full h-full object-cover z-0 opacity-80"
-                    />
+              <div className="relative aspect-video">
+                
+                {/* Gọi Component Video */}
+                <WebRtcVideoPlayer cameraId={camera.id} className="" />
 
-                    {camera.hasDetection && (
-                      <div className="absolute inset-0 flex items-center justify-center p-4 z-10 pointer-events-none">
-                        <div className="relative w-full h-full max-w-32 max-h-32">
-                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-100/20 via-yellow-50/10 to-amber-200/20 shadow-lg opacity-80" />
-                          <div className="absolute inset-0 border border-emerald-400/50 rounded-full animate-pulse" />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {camera.hasDetection && (
-                      <div className="absolute top-1 left-1 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400 z-20">
-                        DETECTED
-                      </div>
-                    )}
-                    <div className="absolute top-1 right-1 flex items-center gap-1 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded z-20">
-                      <div className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
-                      <span className="text-[10px] font-semibold text-red-400">REC</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Camera className="w-8 h-8 text-slate-700" />
-                  </div>
-                )}
+                <div className="absolute top-1 right-1 flex items-center gap-1 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded z-20">
+                  <div className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] font-semibold text-red-400">REC</span>
+                </div>
               </div>
-
-              {/* Camera Info */}
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-white truncate" title={camera.name}>{camera.name}</p>
-                <p className="text-[10px] text-slate-500 truncate" title={camera.zone}>{camera.zone}</p>
-              </div>
-
-              {/* Status Badge */}
-              <Badge className={`text-[10px] w-full justify-center ${
-                camera.hasDetection
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                  : camera.status === 'active'
-                    ? 'bg-slate-700 text-slate-400 border-slate-600'
-                    : 'bg-red-500/10 text-red-400 border-red-500/30'
-              }`}>
-                {camera.hasDetection ? 'Đang phát hiện' : camera.status === 'active' ? 'Đang hoạt động' : 'Offline'}
+              <Badge className="text-[10px] w-full justify-center bg-slate-700 text-slate-300 border-slate-600">
+                WebRTC Real-time
               </Badge>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* ======================================= */}
-      {/* LARGE SELECTED CAMERA VIEW (MÀN HÌNH LỚN) */}
-      {/* ======================================= */}
       <Card className="border-slate-800 bg-[#151E2F] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
         <CardHeader className="border-b border-slate-800">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-sky-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-400/30">
-                <Camera className="w-5 h-5 text-navy-950" />
+              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-sky-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Camera className="w-5 h-5 text-slate-900" />
               </div>
               <div>
-                <CardTitle className="text-white">{selectedCam.id} - {selectedCam.name}</CardTitle>
+                <CardTitle className="text-white">{selectedCam.name}</CardTitle>
                 <p className="text-sm text-slate-400 mt-1">{selectedCam.zone}</p>
               </div>
             </div>
-            <Badge className={`${
-              selectedCam.hasDetection
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
-                : selectedCam.status === 'active'
-                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
-            }`}>
-              {selectedCam.hasDetection
-                ? 'Đang theo dõi mục tiêu'
-                : selectedCam.status === 'active'
-                  ? 'Đang hoạt động'
-                  : 'Offline'}
+            <Badge className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 animate-pulse">
+              ĐỒNG BỘ THỜI GIAN THỰC
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="relative aspect-video bg-[#0B1121] overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="relative w-full h-full">
-                
-                {selectedCam.status === 'active' ? (
-                  <>
-                    {/* 🚀 ĐÃ SỬA: Luôn luôn gắn file /video_test.mp4 vào khung LỚN */}
-                    <AutoPlayVideo 
-                      src={selectedCam.url || "/video_test.mp4"} 
-                      className="absolute inset-0 w-full h-full object-cover z-0"
-                    />
-                  </>
-                ) : (
-                  <div className="absolute inset-0 bg-slate-900 flex items-center justify-center z-0">
-                    <div className="text-center space-y-3">
-                      <Camera className="w-16 h-16 text-slate-700 mx-auto" />
-                      <p className="text-slate-500 font-mono text-sm">Camera offline</p>
-                    </div>
-                  </div>
-                )}
+          <div className="relative aspect-video">
+            
+            {/* Gọi Component Video Màn Lớn */}
+            <WebRtcVideoPlayer cameraId={selectedCam.id} className="" />
 
-                {/* Grid overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0B1121]/80 z-10 pointer-events-none" />
-                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-10 pointer-events-none">
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <div key={i} className="border border-cyan-500/10" />
-                  ))}
-                </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0B1121]/80 z-10 pointer-events-none" />
+            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-10 pointer-events-none">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="border border-cyan-500/10" />
+              ))}
+            </div>
 
-                {/* Hiệu ứng phát hiện bánh tráng */}
-                {selectedCam.status === 'active' && selectedCam.hasDetection && (
-                  <div className="absolute inset-0 flex items-center justify-center p-12 z-20 pointer-events-none">
-                    <div className="relative w-full h-full max-w-2xl max-h-96">
-                      <div className="absolute inset-0 rounded-full bg-emerald-500/10 shadow-2xl opacity-80" />
-                      <div className="absolute inset-0 rounded-full" style={{
-                        background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-                      }} />
-                      <div className="absolute inset-0 border-2 border-emerald-400/50 rounded-full animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-xs px-3 py-1 rounded font-mono shadow-[0_0_10px_rgba(16,185,129,0.5)] whitespace-nowrap">
-                          BÁNH TRÁNG DETECTED
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Camera info overlay */}
-                <div className="absolute top-4 left-4 bg-[#0B1121]/80 backdrop-blur-md px-3 py-2 rounded-lg z-20 font-mono text-xs text-slate-300 space-y-1 border border-slate-800">
-                  <div>{selectedCam.id} | {selectedCam.zone.split(' - ')[0]}</div>
-                  <div className="text-cyan-400">{new Date().toLocaleTimeString('vi-VN')}</div>
-                  <div className="text-[10px] text-slate-500 mt-1 truncate max-w-[200px]" title={selectedCam.url || "/video_test.mp4"}>
-                    Src: {selectedCam.url || "/video_test.mp4"}
-                  </div>
-                </div>
-
-                {/* Recording indicator */}
-                {selectedCam.status === 'active' && (
-                  <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500/20 border border-red-500/30 backdrop-blur-md px-3 py-1.5 rounded-lg z-20">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                    <span className="text-red-400 text-xs font-semibold">REC</span>
-                  </div>
-                )}
-
-              </div>
+            <div className="absolute top-4 left-4 bg-[#0B1121]/80 backdrop-blur-md px-3 py-2 rounded-lg z-20 font-mono text-xs text-slate-300 space-y-1 border border-slate-800">
+              <div>UUID: {selectedCam.id}</div>
+              <div className="text-cyan-400">{new Date().toLocaleTimeString('vi-VN')}</div>
             </div>
           </div>
         </CardContent>
