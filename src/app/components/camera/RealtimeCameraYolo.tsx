@@ -303,7 +303,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     setCameraActive(false);
     setRealtimeDetections([]);
     setRealtimeError(null);
-    
+    onYoloStateChange(false);
     // 🚀 KHÔNG reset progress về 0. Cứ để nguyên state để `MetricsPanel` kế thừa số phút còn lại.
     onDataUpdate?.({ 
       dryness: predictionData.dryness, 
