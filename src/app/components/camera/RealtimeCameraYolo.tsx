@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { 
   Camera, Scan, Tag, AlertTriangle, Upload, Video, Settings2, Percent,
-  Thermometer, Droplets, CloudRain, XCircle
+  Thermometer, Droplets, CloudRain, XCircle, PlayCircle
 } from 'lucide-react'; 
 
 import apiClient from '../../../services/api'; 
@@ -47,6 +47,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
   const [cameraActive, setCameraActive] = useState(false);
   const [videoDemoUrl, setVideoDemoUrl] = useState<string | null>(null);
   const [isUsingLiveStream, setIsUsingLiveStream] = useState(false);
+  const [isPlayBlocked, setIsPlayBlocked] = useState(false); // Trạng thái bị chặn Autoplay
 
   const [realtimeDetections, setRealtimeDetections] = useState<{ label: string; confidence: number; bbox: number[] }[]>([]);
   const [realtimeError, setRealtimeError] = useState<string | null>(null);
@@ -73,7 +74,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     fetchDbCameras();
   }, []);
 
-  // 🚀 TỰ ĐỘNG BẬT WEBRTC KHI LOAD HOẶC ĐỔI CAMERA
   useEffect(() => {
     if (localSelectedCameraId && !cameraActive && !videoDemoUrl && !realtimeLoading) {
       const timer = setTimeout(() => {
@@ -307,6 +307,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     isDetectingRef.current = false;
     hasDetectionRef.current = false; 
     setIsUsingLiveStream(false);
+    setIsPlayBlocked(false);
 
     if (intervalRef.current) clearTimeout(intervalRef.current);
     if (pcRef.current) {
@@ -366,21 +367,20 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     stopAny();
     setRealtimeError(null);
     setRealtimeLoading(true);
+    setIsPlayBlocked(false);
     setConnectionStatusText('Bắt đầu kết nối...');
     
     try {
       const signalUrl = (import.meta as any).env?.VITE_WEBRTC_SIGNAL_URL || 'https://camera-relay-v1.onrender.com';
       const fetchHeaders = { 'Content-Type': 'application/json' };
 
-      // 🚀 BẢO MẬT AN TOÀN: Chỉ đọc giá trị từ file .env, tuyệt đối không hardcode text trần
       const turnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
       const turnUser = (import.meta as any).env?.VITE_TURN_SERVER_USER;
       const turnCred = (import.meta as any).env?.VITE_TURN_SERVER_CRED;
 
-      // 1. Kiểm tra camera live trước khi bắt tay WebRTC
       const isLive = await checkCameraStatus(signalUrl);
       if (!isLive) {
-        setRealtimeError("Camera tại xưởng chưa đẩy luồng lên Server. Đang chờ...");
+        setRealtimeError("Camera tại xưởng chưa đẩy luồng lên Server. Đang chờ kết nối...");
         setRealtimeLoading(false);
         return; 
       }
@@ -392,7 +392,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         { urls: 'stun:stun1.l.google.com:19302' }
       ];
 
-      // Chỉ kích hoạt cấu hình TURN nếu các biến môi trường đã được khai báo đầy đủ
       if (turnUrl && turnUser && turnCred) {
         iceServersConfig.push({
           urls: turnUrl,
@@ -404,17 +403,38 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       const pc = new RTCPeerConnection({ iceServers: iceServersConfig });
       pcRef.current = pc;
 
-      // 3. Xử lý nhận luồng
+      // 🚀 BẢN VÁ LỖI HIỂN THỊ PRODUCTION (CƯỠNG ÉP RENDER)
       pc.ontrack = (event) => {
         console.log("✅ Đã nhận được track video từ Server!", event.track.kind);
-        const stream = event.streams[0] || new MediaStream([event.track]);
         
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(err => {
-            console.warn(`Autoplay warning: ${err.message}.`);
-          });
-          setIsUsingLiveStream(true);
+          // Ép buộc DOM phải câm (muted) trước khi nhận stream để vượt rào Autoplay
+          videoRef.current.muted = true;
+          
+          if (event.streams && event.streams.length > 0) {
+            videoRef.current.srcObject = event.streams[0];
+          } else {
+            let stream = videoRef.current.srcObject as MediaStream;
+            if (!stream) {
+              stream = new MediaStream();
+              videoRef.current.srcObject = stream;
+            }
+            if (!stream.getTracks().includes(event.track)) {
+              stream.addTrack(event.track);
+            }
+          }
+
+          // Chờ cho hình ảnh tải xong metadata rồi mới Play
+          videoRef.current.onloadedmetadata = async () => {
+            try {
+              await videoRef.current?.play();
+              setIsUsingLiveStream(true);
+              setIsPlayBlocked(false);
+            } catch (err: any) {
+              console.warn(`Autoplay bị chặn trên Production: ${err.message}.`);
+              setIsPlayBlocked(true); // Kích hoạt nút bấm thủ công nếu bị chặn
+            }
+          };
         }
       };
 
@@ -428,10 +448,8 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         }
       };
 
-      // Yêu cầu chỉ nhận Video
       pc.addTransceiver('video', { direction: 'recvonly' });
 
-      // 4. Gom ICE Candidates
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -446,7 +464,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         }
       });
 
-      // 5. Gửi SDP
       setConnectionStatusText('Đang gửi SDP Offer...');
       const response = await fetch(`${signalUrl}/api/view/offer`, {
         method: 'POST',
@@ -463,9 +480,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
 
       const answer = await response.json();
 
-      if (pc.signalingState === 'closed') {
-        return;
-      }
+      if (pc.signalingState === 'closed') return;
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
@@ -503,6 +518,17 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       loopRef.current = true;
       onYoloStateChange(true);
       setTimeout(() => detectLoop(), 1000);
+    }
+  };
+
+  // Nút bấm thủ công cho tình huống bị trình duyệt chặn Autoplay tuyệt đối
+  const forcePlayVideo = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = true;
+      videoRef.current.play().then(() => {
+        setIsPlayBlocked(false);
+        setIsUsingLiveStream(true);
+      }).catch(e => console.error("Vẫn không thể phát:", e));
     }
   };
 
@@ -565,7 +591,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       </CardHeader>
       <CardContent className="p-6">
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="relative bg-[#0B1121] rounded-xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+          <div className="relative bg-[#0B1121] rounded-xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center shadow-inner group">
             
             {!cameraActive && !realtimeLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 z-10">
@@ -581,6 +607,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               </div>
             )}
             
+            {/* 🚀 LUÔN RENDER THẺ VIDEO, ÉP THUỘC TÍNH BẰNG TAY */}
             <video
               ref={videoRef}
               autoPlay
@@ -591,13 +618,28 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               }`}
             />
 
-            {cameraActive && (
-              <div className="absolute top-2 left-2 bg-[#0B1121]/80 backdrop-blur-md px-2 py-1 rounded text-xs font-mono text-cyan-400 border border-cyan-500/20 z-20">
-                <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse inline-block mr-1" />
-                {videoDemoUrl ? "VIDEO TEST" : "LIVE WEBRTC < 0.5s"}
+            {/* 🚀 GIAO DIỆN NÚT BẤM DỰ PHÒNG NẾU TRÌNH DUYỆT CHẶN VIDEO */}
+            {isPlayBlocked && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-30 backdrop-blur-sm">
+                <button 
+                  onClick={forcePlayVideo}
+                  className="flex flex-col items-center justify-center text-cyan-400 hover:text-cyan-300 hover:scale-110 transition-transform"
+                >
+                  <PlayCircle className="w-16 h-16 mb-3 shadow-[0_0_15px_rgba(6,182,212,0.5)] rounded-full bg-black/50" />
+                  <span className="font-bold tracking-wide bg-[#0B1121] px-4 py-1.5 rounded-full border border-cyan-500/30">
+                    Bấm để xem Camera
+                  </span>
+                </button>
               </div>
             )}
-            {isScanning && (
+
+            {cameraActive && !isPlayBlocked && (
+              <div className="absolute top-2 left-2 bg-[#0B1121]/80 backdrop-blur-md px-2 py-1 rounded text-xs font-mono text-cyan-400 border border-cyan-500/20 z-20">
+                <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse inline-block mr-1" />
+                {videoDemoUrl ? "VIDEO TEST" : "LIVE WEBRTC"}
+              </div>
+            )}
+            {isScanning && !isPlayBlocked && (
               <div className="absolute top-2 right-2 bg-orange-500/20 px-2 py-1 rounded text-xs font-mono text-orange-400 border border-orange-500/30 z-20">
                 <Scan className="w-3 h-3 animate-spin inline-block mr-1" />
                 AI Đang quét...
