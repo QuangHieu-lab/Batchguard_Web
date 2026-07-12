@@ -47,7 +47,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
   const [cameraActive, setCameraActive] = useState(false);
   const [videoDemoUrl, setVideoDemoUrl] = useState<string | null>(null);
   const [isUsingLiveStream, setIsUsingLiveStream] = useState(false);
-  const [isPlayBlocked, setIsPlayBlocked] = useState(false); 
+  const [isPlayBlocked, setIsPlayBlocked] = useState(false); // Trạng thái bị chặn Autoplay
 
   const [realtimeDetections, setRealtimeDetections] = useState<{ label: string; confidence: number; bbox: number[] }[]>([]);
   const [realtimeError, setRealtimeError] = useState<string | null>(null);
@@ -403,27 +403,38 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       const pc = new RTCPeerConnection({ iceServers: iceServersConfig });
       pcRef.current = pc;
 
-      // 🚀 BẢN VÁ ÉP PHÁT VIDEO MẠNH MẼ (KHÔNG CHỜ ONLOADEDMETADATA)
+      // 🚀 BẢN VÁ LỖI HIỂN THỊ PRODUCTION (CƯỠNG ÉP RENDER)
       pc.ontrack = (event) => {
         console.log("✅ Đã nhận được track video từ Server!", event.track.kind);
         
         if (videoRef.current) {
-          const stream = event.streams[0] || new MediaStream([event.track]);
-          videoRef.current.srcObject = stream;
+          // Ép buộc DOM phải câm (muted) trước khi nhận stream để vượt rào Autoplay
+          videoRef.current.muted = true;
           
-          // Dùng setTimeout cực ngắn để đảm bảo DOM đã nhận srcObject
-          setTimeout(() => {
-            if (videoRef.current) {
-              videoRef.current.play().then(() => {
-                console.log("✅ Video đã phát thành công!");
-                setIsUsingLiveStream(true);
-                setIsPlayBlocked(false);
-              }).catch(err => {
-                console.warn(`⚠️ Autoplay bị chặn trên Production: ${err.message}`);
-                setIsPlayBlocked(true); // Hiển thị ngay nút bấm giả
-              });
+          if (event.streams && event.streams.length > 0) {
+            videoRef.current.srcObject = event.streams[0];
+          } else {
+            let stream = videoRef.current.srcObject as MediaStream;
+            if (!stream) {
+              stream = new MediaStream();
+              videoRef.current.srcObject = stream;
             }
-          }, 100);
+            if (!stream.getTracks().includes(event.track)) {
+              stream.addTrack(event.track);
+            }
+          }
+
+          // Chờ cho hình ảnh tải xong metadata rồi mới Play
+          videoRef.current.onloadedmetadata = async () => {
+            try {
+              await videoRef.current?.play();
+              setIsUsingLiveStream(true);
+              setIsPlayBlocked(false);
+            } catch (err: any) {
+              console.warn(`Autoplay bị chặn trên Production: ${err.message}.`);
+              setIsPlayBlocked(true); // Kích hoạt nút bấm thủ công nếu bị chặn
+            }
+          };
         }
       };
 
@@ -510,7 +521,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     }
   };
 
-  // Hàm ép phát Video khi người dùng click vào nút
+  // Nút bấm thủ công cho tình huống bị trình duyệt chặn Autoplay tuyệt đối
   const forcePlayVideo = () => {
     if (videoRef.current) {
       videoRef.current.muted = true;
@@ -596,6 +607,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               </div>
             )}
             
+            {/* 🚀 LUÔN RENDER THẺ VIDEO, ÉP THUỘC TÍNH BẰNG TAY */}
             <video
               ref={videoRef}
               autoPlay
@@ -606,9 +618,9 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               }`}
             />
 
-            {/* 🚀 NÚT BẤM DỰ PHÒNG CHỐNG AUTOPLAY */}
+            {/* 🚀 GIAO DIỆN NÚT BẤM DỰ PHÒNG NẾU TRÌNH DUYỆT CHẶN VIDEO */}
             {isPlayBlocked && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0B1121]/80 z-30 backdrop-blur-sm">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-30 backdrop-blur-sm">
                 <button 
                   onClick={forcePlayVideo}
                   className="flex flex-col items-center justify-center text-cyan-400 hover:text-cyan-300 hover:scale-110 transition-transform"
