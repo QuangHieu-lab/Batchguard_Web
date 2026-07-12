@@ -3,12 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { 
   Camera, Scan, Tag, AlertTriangle, Upload, Video, Settings2, Percent,
-  Thermometer, Droplets, CloudRain
+  Thermometer, Droplets, CloudRain, XCircle
 } from 'lucide-react'; 
 
 import apiClient from '../../../services/api'; 
 import { detectionApi, cameraApi } from '../../../services/endpoints'; 
 import { useAuth } from '../../contexts/AuthContext'; 
+import { toast } from 'sonner';
 
 interface RealtimeCameraYoloProps {
   onYoloStateChange: React.Dispatch<React.SetStateAction<boolean>>;
@@ -51,6 +52,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
   const [realtimeError, setRealtimeError] = useState<string | null>(null);
   const [realtimeLoading, setRealtimeLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [connectionStatusText, setConnectionStatusText] = useState<string>('Đang tải luồng camera...');
 
   const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
   const [predictionData, setPredictionData] = useState({ dryness: 0, minutesLeft: 0 });
@@ -70,6 +72,17 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     };
     fetchDbCameras();
   }, []);
+
+  // 🚀 TỰ ĐỘNG BẬT WEBRTC KHI LOAD HOẶC ĐỔI CAMERA
+  useEffect(() => {
+    if (localSelectedCameraId && !cameraActive && !videoDemoUrl && !realtimeLoading) {
+      const timer = setTimeout(() => {
+        startCamera();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localSelectedCameraId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,11 +113,10 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         console.warn("Không lấy được dữ liệu thời tiết:", e);
       }
 
-      // 🚀 ĐỒNG BỘ LOGIC CHẠY NỀN: Đọc thời gian lưu trong máy
       const storageKey = `real_start_time_yolo_${localSelectedCameraId || 'default'}`;
+      const maxDrynessKey = `max_dryness_yolo_${localSelectedCameraId || 'default'}`;
       let savedStartTime = localStorage.getItem(storageKey);
 
-      // Kích hoạt tính toán nếu AI đang nhìn thấy bánh HOẶC đã có lịch sử phơi từ trước
       const isDryingActive = hasDetectionRef.current || savedStartTime !== null;
       const showPredictionUI = isDryingActive && isPremium;
       
@@ -115,23 +127,24 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
           const calcTemp = currentTemp > 0 ? currentTemp : 34.0;
           const calcHum = currentHum > 0 ? currentHum : 58.0;
 
-          const aiResponse = await fetch(`${AI_URL}/drying/predict`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ avg_temperature: calcTemp, avg_humidity: calcHum })
-          });
-          
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            if (aiData.predicted_drying_time) {
-              predictedMinutesFromAI = aiData.predicted_drying_time;
+          if (!videoDemoUrl) {
+            const aiResponse = await fetch(`${AI_URL}/drying/predict`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ avg_temperature: calcTemp, avg_humidity: calcHum })
+            });
+            
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json();
+              if (aiData.predicted_drying_time) {
+                predictedMinutesFromAI = aiData.predicted_drying_time;
+              }
             }
           }
         } catch (aiError) {
           console.error("Lỗi khi gọi AI dự báo thời gian (YOLO):", aiError);
         }
 
-        // Chỉ tạo mốc thời gian mới khi chưa có và AI nhìn thấy bánh
         if (!savedStartTime && hasDetectionRef.current) {
           savedStartTime = Date.now().toString();
           localStorage.setItem(storageKey, savedStartTime);
@@ -141,11 +154,20 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
           const elapsedMins = (Date.now() - parseInt(savedStartTime, 10)) / 60000;
 
           realMinutesLeft = Math.max(0, predictedMinutesFromAI - elapsedMins);
-          realDryness = 100 - ((realMinutesLeft / predictedMinutesFromAI) * 100);
-          realDryness = Math.min(100, Math.max(0, realDryness));
+          
+          let calculatedDryness = 100 - ((realMinutesLeft / predictedMinutesFromAI) * 100);
+          calculatedDryness = Math.min(100, Math.max(0, calculatedDryness));
+
+          let maxDryness = parseFloat(localStorage.getItem(maxDrynessKey) || '0');
+          if (calculatedDryness > maxDryness) {
+            maxDryness = calculatedDryness;
+            localStorage.setItem(maxDrynessKey, maxDryness.toString());
+          }
+          realDryness = maxDryness;
 
           if (realMinutesLeft <= 0) {
             localStorage.removeItem(storageKey);
+            localStorage.removeItem(maxDrynessKey);
             realDryness = 100;
             realMinutesLeft = 0;
           }
@@ -166,7 +188,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       isMounted = false;
       clearInterval(interval);
     };
-  }, [cameraActive, isPremium, onDataUpdate, localSelectedCameraId]);
+  }, [cameraActive, isPremium, onDataUpdate, localSelectedCameraId, videoDemoUrl]);
 
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     if (isDetectingRef.current) return 'busy';
@@ -250,7 +272,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       setRealtimeDetections(validDets.length > 0 ? validDets : []);
       hasDetectionRef.current = validDets.length > 0; 
 
-      if (localSelectedCameraId) {
+      if (localSelectedCameraId && !videoDemoUrl) {
         detectionApi.create({
           camera_id: localSelectedCameraId,
           detected_count: count,
@@ -266,7 +288,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       setIsScanning(false); 
       isDetectingRef.current = false; 
     }
-  }, [localSelectedCameraId]);
+  }, [localSelectedCameraId, videoDemoUrl]);
 
   const detectLoop = useCallback(async () => {
     if (!loopRef.current) return;
@@ -304,7 +326,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     setRealtimeDetections([]);
     setRealtimeError(null);
     onYoloStateChange(false);
-    // 🚀 KHÔNG reset progress về 0. Cứ để nguyên state để `MetricsPanel` kế thừa số phút còn lại.
+    
     onDataUpdate?.({ 
       dryness: predictionData.dryness, 
       minutesLeft: predictionData.minutesLeft, 
@@ -312,55 +334,108 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     }); 
   };
 
+  const handleCancelBatchDirectly = () => {
+    const isConfirm = window.confirm("Bạn có chắc chắn muốn hủy mẻ phơi này không? Toàn bộ dữ liệu đếm ngược sẽ được xóa sạch.");
+    if (!isConfirm) return;
+
+    const storageKey = `real_start_time_yolo_${localSelectedCameraId || 'default'}`;
+    const maxDrynessKey = `max_dryness_yolo_${localSelectedCameraId || 'default'}`;
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(maxDrynessKey);
+
+    setPredictionData({ dryness: 0, minutesLeft: 0 });
+    
+    onDataUpdate?.({ dryness: 0, minutesLeft: 0, hasDetection: hasDetectionRef.current });
+    toast.success("Đã hủy và làm sạch tiến độ mẻ phơi!");
+  };
+
+  const checkCameraStatus = async (serverUrl: string): Promise<boolean> => {
+    try {
+      setConnectionStatusText('Đang kiểm tra camera...');
+      const res = await fetch(`${serverUrl}/api/status`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return data.camera_live === true;
+    } catch (e) {
+      console.warn("Lỗi kiểm tra trạng thái camera", e);
+      return false;
+    }
+  };
+
   const startCamera = async () => {
     stopAny();
     setRealtimeError(null);
     setRealtimeLoading(true);
+    setConnectionStatusText('Bắt đầu kết nối...');
     
     try {
       const signalUrl = (import.meta as any).env?.VITE_WEBRTC_SIGNAL_URL || 'https://camera-relay-v1.onrender.com';
       const fetchHeaders = { 'Content-Type': 'application/json' };
 
+      // 🚀 BẢO MẬT AN TOÀN: Chỉ đọc giá trị từ file .env, tuyệt đối không hardcode text trần
       const turnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
       const turnUser = (import.meta as any).env?.VITE_TURN_SERVER_USER;
       const turnCred = (import.meta as any).env?.VITE_TURN_SERVER_CRED;
+
+      // 1. Kiểm tra camera live trước khi bắt tay WebRTC
+      const isLive = await checkCameraStatus(signalUrl);
+      if (!isLive) {
+        setRealtimeError("Camera tại xưởng chưa đẩy luồng lên Server. Đang chờ...");
+        setRealtimeLoading(false);
+        return; 
+      }
+
+      setConnectionStatusText('Đang bắt tay WebRTC...');
 
       const iceServersConfig: RTCIceServer[] = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
       ];
 
-      if (turnUrl && turnUrl.trim() !== "") {
+      // Chỉ kích hoạt cấu hình TURN nếu các biến môi trường đã được khai báo đầy đủ
+      if (turnUrl && turnUser && turnCred) {
         iceServersConfig.push({
           urls: turnUrl,
-          username: turnUser || "",
-          credential: turnCred || "",
+          username: turnUser,
+          credential: turnCred,
         });
       }
 
-      const pc = new RTCPeerConnection({
-        iceServers: iceServersConfig,
-      });
+      const pc = new RTCPeerConnection({ iceServers: iceServersConfig });
       pcRef.current = pc;
 
-      pc.oniceconnectionstatechange = () => {
-        console.log("⚡ Trạng thái ICE Trạm AI:", pc.iceConnectionState);
-      };
-
-      pc.addTransceiver('video', { direction: 'recvonly' });
-
+      // 3. Xử lý nhận luồng
       pc.ontrack = (event) => {
-        console.log("✅ Trạm AI Đã nhận được luồng Video:", event);
-        if (event.track.kind === 'video' && videoRef.current) {
-          videoRef.current.srcObject = event.streams[0] || new MediaStream([event.track]);
-          videoRef.current.play().catch(e => console.error("Trình duyệt chặn Autoplay tại AI Station:", e));
+        console.log("✅ Đã nhận được track video từ Server!", event.track.kind);
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(err => {
+            console.warn(`Autoplay warning: ${err.message}.`);
+          });
           setIsUsingLiveStream(true);
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        console.log(`WebRTC State: ${pc.connectionState}`);
+        if (pc.connectionState === 'connected') {
+          console.log('Kết nối WebRTC THÀNH CÔNG!');
+        } else if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+          setRealtimeError('WebRTC bị ngắt kết nối khỏi máy chủ.');
+          stopAny();
+        }
+      };
+
+      // Yêu cầu chỉ nhận Video
+      pc.addTransceiver('video', { direction: 'recvonly' });
+
+      // 4. Gom ICE Candidates
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      setConnectionStatusText('Đang gom ICE candidates...');
       await new Promise<void>((resolve) => {
         if (pc.iceGatheringState === 'complete') {
             resolve();
@@ -371,6 +446,8 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         }
       });
 
+      // 5. Gửi SDP
+      setConnectionStatusText('Đang gửi SDP Offer...');
       const response = await fetch(`${signalUrl}/api/view/offer`, {
         method: 'POST',
         headers: fetchHeaders,
@@ -381,14 +458,12 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(errData?.detail || `Lỗi ${response.status}`);
+        throw new Error(`Server WebRTC phản hồi lỗi ${response.status}`);
       }
 
       const answer = await response.json();
 
       if (pc.signalingState === 'closed') {
-        console.warn(`⚠️ Đường ống WebRTC [AI Station] đã đóng trước khi nhận Answer SDP. Bỏ qua.`);
         return;
       }
 
@@ -400,11 +475,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       onYoloStateChange(true);
     } catch (err: any) {
       console.error("Lỗi WebRTC AI:", err);
-      if (err.message.includes("Camera is offline") || err.message.includes("503")) {
-        setRealtimeError("Camera đang ngoại tuyến. Chưa có thiết bị xưởng đẩy luồng.");
-      } else {
-        setRealtimeError("Trạm WebRTC Cloud đang bận hoặc từ chối truy cập.");
-      }
+      setRealtimeError(`Lỗi kết nối: ${err.message || 'Máy chủ bận'}`);
     } finally {
       setRealtimeLoading(false);
     }
@@ -415,8 +486,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     setLocalSelectedCameraId(newDbId);
     if (cameraActive && !videoDemoUrl) {
       stopAny();
-      setTimeout(() => setLocalSelectedCameraId(newDbId), 0);
-      setTimeout(() => startCamera(), 300);
     }
   };
 
@@ -483,18 +552,14 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               <span>Test Video Demo</span>
             </button>
 
-            <button
-              onClick={() => {
-                if (!localSelectedCameraId) { alert("Vui lòng chọn 1 Camera trước!"); return; }
-                cameraActive ? stopAny() : startCamera();
-              }}
-              disabled={realtimeLoading}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold ${
-                cameraActive ? "bg-red-500 text-white" : "bg-cyan-500 text-white"
-              }`}
-            >
-              {realtimeLoading ? "Đang kết nối..." : cameraActive ? "Dừng Phân Tích" : "Kích Hoạt AI WebRTC"}
-            </button>
+            {cameraActive && (
+              <button
+                onClick={stopAny}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Dừng Phân Tích
+              </button>
+            )}
           </div>
         </CardTitle>
       </CardHeader>
@@ -505,7 +570,14 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
             {!cameraActive && !realtimeLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 z-10">
                 <Video className="w-12 h-12 mb-2 opacity-50" />
-                <p className="text-sm">Chọn Camera & Bật AI để quét WebRTC</p>
+                <p className="text-sm">Trạm AI đang chờ kết nối</p>
+              </div>
+            )}
+
+            {realtimeLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 z-10 bg-[#0B1121]/80 backdrop-blur-sm">
+                <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3" />
+                <p className="text-xs font-mono">{connectionStatusText}</p>
               </div>
             )}
             
@@ -514,7 +586,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               autoPlay
               muted
               playsInline
-              crossOrigin="anonymous" 
               className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 z-0 ${
                 cameraActive ? "opacity-100" : "opacity-0"
               }`}
@@ -597,7 +668,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
                   </div>
                 )}
 
-                {/* 🚀 ĐỒNG BỘ HIỂN THỊ TIẾN ĐỘ THỜI GIAN THỰC Kể cả khi mất dấu bánh trong vài giây */}
                 {(hasDetectionRef.current || predictionData.dryness > 0) ? (
                   <div className="space-y-3 pt-2 border-t border-slate-800/50">
                     <div className="flex items-center justify-between">
@@ -616,13 +686,21 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
                       </div>
                     </div>
                     
-                    {/* 🚀 CẢNH BÁO AI TẠM MẤT DẤU */}
                     {!hasDetectionRef.current && predictionData.minutesLeft > 0 && (
                       <div className="flex flex-col items-center justify-center p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg mt-2 text-center">
                         <span className="text-xs font-semibold text-amber-400">AI đang tạm mất dấu mẻ bánh</span>
                         <span className="text-[10px] text-amber-500/80">Tiến độ vẫn được lưu và đếm ngược ngầm</span>
                       </div>
                     )}
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={handleCancelBatchDirectly}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold rounded border border-red-500/20 transition-colors cursor-pointer"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Hủy mẻ phơi
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-2 bg-slate-800/30 rounded text-center text-xs text-slate-400">AI chưa thấy bánh trên giàn phơi.</div>
