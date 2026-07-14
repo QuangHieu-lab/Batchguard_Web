@@ -6,7 +6,7 @@ export interface CameraData {
   id: string;
   name: string;
   zone: string;
-  status: 'active' | 'offline' | 'inactive'; 
+  status: 'active' | 'offline' | 'inactive' | 'online'; 
   hasDetection: boolean;
   streamUrl?: string; 
 }
@@ -15,11 +15,9 @@ interface MultiCameraViewProps {
   cameras: CameraData[];
   selectedCamera: string;
   onSelectCamera: (id: string) => void;
-  onDeleteCamera: (id: string) => void;
+  // 🚀 ĐÃ CẬP NHẬT: Thêm dấu ? để biến hàm này thành không bắt buộc
+  onDeleteCamera?: (id: string) => void;
 }
-
-// 🚀 Đã dọn dẹp: Component WebRtcVideoPlayer đã được xóa bỏ khỏi file này 
-// Vì nhiệm vụ stream video giờ đây hoàn toàn thuộc về trạm RealtimeCameraYolo
 
 export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: MultiCameraViewProps) {
   
@@ -28,7 +26,8 @@ export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDel
       <div className="p-8 text-center bg-[#0B1121] rounded-xl border border-dashed border-slate-700">
         <Camera className="w-12 h-12 text-slate-600 mx-auto mb-3 opacity-50" />
         <p className="text-slate-400 font-medium">Chưa có camera nào được kết nối.</p>
-        <p className="text-xs text-slate-500 mt-1">Bấm "Thêm Camera" ở góc trên để bắt đầu theo dõi.</p>
+        {/* 🚀 ĐÃ CẬP NHẬT: Đổi câu văn vì User không còn nút Thêm nữa */}
+        <p className="text-xs text-slate-500 mt-1">Đang chờ hệ thống cấp phát hoặc thêm mới.</p>
       </div>
     );
   }
@@ -52,16 +51,19 @@ export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDel
               <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,1)]" />
             )}
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation(); 
-                onDeleteCamera(camera.id);
-              }}
-              className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-20"
-              title="Xóa Camera"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {/* 🚀 ĐÃ CẬP NHẬT: Chỉ render nút xóa nếu CÓ truyền hàm onDeleteCamera */}
+            {onDeleteCamera && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation(); 
+                  onDeleteCamera(camera.id);
+                }}
+                className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                title="Xóa Camera"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             <CardHeader className="pb-2 pt-4 px-4">
               <div className="flex items-center justify-between">
@@ -82,44 +84,42 @@ export function MultiCameraView({ cameras, selectedCamera, onSelectCamera, onDel
                 </div>
                 
                 {/* Chấm xanh trạng thái */}
-                {camera.status === 'active' && (
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)] mr-6 group-hover:hidden" />
+                {(camera.status === 'active' || camera.status === 'online') && (
+                  <div className={`w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)] ${onDeleteCamera ? 'mr-6 group-hover:hidden' : ''}`} />
                 )}
               </div>
             </CardHeader>
 
             <CardContent className="px-4 pb-4 pt-2 space-y-3">
-              {/* Vùng hiển thị "Thumbnail/Trạng thái tĩnh" - KHÔNG ĐƯỢC CHẠY VIDEO Ở ĐÂY */}
+              {/* Vùng hiển thị "Thumbnail/Trạng thái tĩnh" */}
               <div className={`relative aspect-video rounded-lg flex items-center justify-center border border-slate-700/50 ${
                 selectedCamera === camera.id ? 'bg-[#151E2F]' : 'bg-[#0B1121]'
               }`}>
                 {selectedCamera === camera.id ? (
                   <div className="flex flex-col items-center justify-center text-cyan-500/60">
                     <Video className="w-8 h-8 mb-2" />
-                    <span className="text-[10px] font-medium uppercase tracking-widest text-cyan-500">Đang chiếu trên Màn Hình Chính</span>
+                    <span className="text-[10px] font-medium uppercase tracking-widest text-cyan-500 text-center px-2">Đang chiếu trên Màn Hình Chính</span>
                   </div>
                 ) : (
                   <div className="text-center">
                     <p className="text-xs text-slate-500 font-medium">Chế độ chờ</p>
-                    <p className="text-[10px] text-slate-600">Nhấp để xem luồng WebRTC</p>
+                    <p className="text-[10px] text-slate-600 mt-0.5">Nhấp để xem luồng</p>
                   </div>
                 )}
               </div>
 
               <div className="flex justify-between items-center">
-                <Badge className="text-[10px] bg-slate-800 text-slate-400 border-transparent font-normal px-2 py-0">
+                <Badge className="text-[10px] bg-slate-800 text-slate-400 border-transparent font-normal px-2 py-0 truncate max-w-[120px]" title={camera.zone}>
                   {camera.zone}
                 </Badge>
-                {camera.hasDetection }
+                {camera.hasDetection && (
+                  <span className="text-[10px] text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-500/10 rounded">Có cảnh báo</span>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-      
-      {/* 🚀 Đã dọn dẹp: Khung Video Màn Lớn ở dưới cùng cũng đã bị xóa.
-          Vì bây giờ hình ảnh đã được đẩy lên RealtimeCameraYolo hiển thị to rõ phía trên rồi. 
-      */}
     </div>
   );
 }
