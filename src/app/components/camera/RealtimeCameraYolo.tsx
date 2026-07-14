@@ -6,9 +6,7 @@ import {
   Thermometer, Droplets, CloudRain, XCircle, PlayCircle
 } from 'lucide-react'; 
 
-// 🚀 IMPORT LIVEKIT CLIENT SDK
-import { Room, RoomEvent, VideoTrack } from 'livekit-client';
-
+import { Room, RoomEvent } from 'livekit-client';
 import apiClient from '../../../services/api'; 
 import { detectionApi, cameraApi } from '../../../services/endpoints'; 
 import { useAuth } from '../../contexts/AuthContext'; 
@@ -19,6 +17,7 @@ interface RealtimeCameraYoloProps {
   isBackgroundActive: boolean;
   onDataUpdate?: (data: { dryness: number; minutesLeft: number; hasDetection: boolean }) => void;
   cameraId: string; 
+  livekitIdentity?: string; 
 }
 
 const CLASS_NAMES: Record<number, string> = {
@@ -28,17 +27,16 @@ const CLASS_NAMES: Record<number, string> = {
 };
 
 const AI_URL = 'https://huntrot-mylongai-backed-modelai.hf.space';
-
 type DetectStatus = 'success' | 'rate_limit' | 'error' | 'busy';
 
-export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDataUpdate, cameraId }: RealtimeCameraYoloProps) {
+export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDataUpdate, cameraId, livekitIdentity }: RealtimeCameraYoloProps) {
   const { user } = useAuth(); 
   const isPremium = user?.role === 'premium' || user?.role === 'admin';
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasBboxRef = useRef<HTMLCanvasElement>(null); // 🚀 CANVAS VẼ KHUNG NHẬN DIỆN
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // 🚀 THAY THẾ RTCPeerConnection BẰNG LIVEKIT ROOM
   const roomRef = useRef<Room | null>(null); 
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -63,31 +61,73 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
   const [weatherData, setWeatherData] = useState({ temp: 0, hum: 0, rainLabel: '', isRaining: false });
   const [predictionData, setPredictionData] = useState({ dryness: 0, minutesLeft: 0 });
 
-  useEffect(() => {
-    setLocalSelectedCameraId(cameraId);
-  }, [cameraId]);
+  useEffect(() => { setLocalSelectedCameraId(cameraId); }, [cameraId]);
 
   useEffect(() => {
     const fetchDbCameras = async () => {
       try {
         const data: any = await cameraApi.getAll();
         setDbCameras(data || []);
-      } catch (err) {
-        console.warn("Lỗi tải danh sách camera:", err);
-      }
+      } catch (err) {}
     };
     fetchDbCameras();
   }, []);
 
   useEffect(() => {
     if (localSelectedCameraId && !cameraActive && !videoDemoUrl && !realtimeLoading) {
-      const timer = setTimeout(() => {
-        startCamera();
-      }, 500);
+      const timer = setTimeout(() => { startCamera(); }, 500);
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localSelectedCameraId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localSelectedCameraId, livekitIdentity]); 
+
+  // ==========================================
+  // 🚀 VẼ KHUNG BOUNDING BOX LÊN MÀN HÌNH
+  // ==========================================
+  useEffect(() => {
+    const canvas = canvasBboxRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (validDetections.length === 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    validDetections.forEach(d => {
+      const [x1, y1, x2, y2] = d.bbox; 
+      
+      // Vẽ khung màu Cyan (để không bị nhầm với màu xanh lá của Laptop xưởng)
+      ctx.strokeStyle = '#06b6d4'; 
+      ctx.lineWidth = Math.max(3, canvas.width / 250);
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      
+      // Vẽ nền chữ
+      const fontSize = Math.max(18, canvas.width / 35);
+      ctx.font = `bold ${fontSize}px Arial`;
+      const text = `${d.label} ${Math.round(d.confidence*100)}%`;
+      const textWidth = ctx.measureText(text).width;
+      
+      ctx.fillStyle = '#06b6d4';
+      ctx.fillRect(x1, y1 - fontSize - 10, textWidth + 10, fontSize + 10);
+      
+      // Vẽ chữ
+      ctx.fillStyle = '#000000';
+      ctx.fillText(text, x1 + 5, y1 - 8);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeDetections, cameraActive]);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -108,15 +148,12 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         if (data) {
           currentTemp = data.sensor_data?.temperature_c || data.api_weather?.temperature_c || 34.0;
           currentHum = data.sensor_data?.humidity_percent || data.api_weather?.humidity_percent || 58.0;
-          
           if (isPremium && data.prediction) {
             rainLabel = data.prediction.rain_label || '';
             isRaining = data.prediction.currently_raining || false;
           }
         }
-      } catch (e) {
-        console.warn("Không lấy được dữ liệu thời tiết:", e);
-      }
+      } catch (e) {}
 
       const storageKey = `real_start_time_yolo_${localSelectedCameraId || 'default'}`;
       const maxDrynessKey = `max_dryness_yolo_${localSelectedCameraId || 'default'}`;
@@ -129,26 +166,18 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         let predictedMinutesFromAI = 120; 
 
         try {
-          const calcTemp = currentTemp > 0 ? currentTemp : 34.0;
-          const calcHum = currentHum > 0 ? currentHum : 58.0;
-
           if (!videoDemoUrl) {
             const aiResponse = await fetch(`${AI_URL}/drying/predict`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ avg_temperature: calcTemp, avg_humidity: calcHum })
+              body: JSON.stringify({ avg_temperature: currentTemp, avg_humidity: currentHum })
             });
-            
             if (aiResponse.ok) {
               const aiData = await aiResponse.json();
-              if (aiData.predicted_drying_time) {
-                predictedMinutesFromAI = aiData.predicted_drying_time;
-              }
+              if (aiData.predicted_drying_time) predictedMinutesFromAI = aiData.predicted_drying_time;
             }
           }
-        } catch (aiError) {
-          console.error("Lỗi khi gọi AI dự báo thời gian (YOLO):", aiError);
-        }
+        } catch (aiError) {}
 
         if (!savedStartTime && hasDetectionRef.current) {
           savedStartTime = Date.now().toString();
@@ -157,7 +186,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
 
         if (savedStartTime) {
           const elapsedMins = (Date.now() - parseInt(savedStartTime, 10)) / 60000;
-
           realMinutesLeft = Math.max(0, predictedMinutesFromAI - elapsedMins);
           
           let calculatedDryness = 100 - ((realMinutesLeft / predictedMinutesFromAI) * 100);
@@ -182,18 +210,15 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       if (isMounted) {
         setWeatherData({ temp: currentTemp, hum: currentHum, rainLabel, isRaining });
         setPredictionData({ dryness: realDryness, minutesLeft: realMinutesLeft });
-        
         onDataUpdate?.({ dryness: realDryness, minutesLeft: realMinutesLeft, hasDetection: hasDetectionRef.current });
       }
     };
 
     fetchRealtimeData();
     const interval = setInterval(fetchRealtimeData, 5000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => { isMounted = false; clearInterval(interval); };
   }, [cameraActive, isPremium, onDataUpdate, localSelectedCameraId, videoDemoUrl]);
+
 
   const captureAndDetect = useCallback(async (): Promise<DetectStatus> => {
     if (isDetectingRef.current) return 'busy';
@@ -210,16 +235,11 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       const MAX_DIM = 640; 
       let w = vw;
       let h = vh;
+      
       if (w > h) {
-        if (w > MAX_DIM) {
-          h = Math.round(h * (MAX_DIM / w));
-          w = MAX_DIM;
-        }
+        if (w > MAX_DIM) { h = Math.round(h * (MAX_DIM / w)); w = MAX_DIM; }
       } else {
-        if (h > MAX_DIM) {
-          w = Math.round(w * (MAX_DIM / h));
-          h = MAX_DIM;
-        }
+        if (h > MAX_DIM) { w = Math.round(w * (MAX_DIM / h)); h = MAX_DIM; }
       }
 
       const snap = document.createElement("canvas");
@@ -229,11 +249,11 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       try {
         snap.getContext("2d")?.drawImage(video, 0, 0, w, h);
       } catch (drawErr) {
-        console.error("Lỗi cắt ảnh:", drawErr);
         return 'error';
       }
       
-      const rawDataUrl = snap.toDataURL("image/jpeg", 0.7);
+      // 🚀 NÂNG CHẤT LƯỢNG ẢNH TỪ 0.7 LÊN 0.92 ĐỂ AI NHÌN RÕ HƠN
+      const rawDataUrl = snap.toDataURL("image/jpeg", 0.92);
       const base64 = rawDataUrl.includes(",") ? rawDataUrl.split(",")[1] : rawDataUrl;
       
       if (base64.length < 1000) return 'error';
@@ -269,7 +289,8 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         };
       });
       
-      const validDets = dets.filter(d => d.confidence >= 0.3);
+      // 🚀 HẠ THRESHOLD TẠM THỜI XUỐNG 0.25 ĐỂ CHỐNG LẠI NHIỄU TỪ KHUNG XANH LAPTOP
+      const validDets = dets.filter(d => d.confidence >= 0.25);
       const count = validDets.length;
       const totalConf = validDets.reduce((sum, d) => sum + d.confidence, 0);
       const avgConf = count > 0 ? (totalConf / count) : 0;
@@ -279,7 +300,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
 
       if (localSelectedCameraId && !videoDemoUrl) {
         detectionApi.create({
-          camera_id: localSelectedCameraId,
+          camera_id: localSelectedCameraId, 
           detected_count: count,
           confidence: avgConf
         }).catch(() => {});
@@ -316,13 +337,11 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
 
     if (intervalRef.current) clearTimeout(intervalRef.current);
     
-    // 🚀 DỌN DẸP LIVEKIT ROOM THAY VÌ PEER CONNECTION
     if (roomRef.current) {
       roomRef.current.disconnect();
       roomRef.current = null;
     }
     
-    // Gỡ source êm ái
     if (videoRef.current) {
       videoRef.current.srcObject = null;
       videoRef.current.removeAttribute('src');
@@ -337,11 +356,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     setRealtimeError(null);
     onYoloStateChange(false);
     
-    onDataUpdate?.({ 
-      dryness: predictionData.dryness, 
-      minutesLeft: predictionData.minutesLeft, 
-      hasDetection: false 
-    }); 
+    onDataUpdate?.({ dryness: predictionData.dryness, minutesLeft: predictionData.minutesLeft, hasDetection: false }); 
   };
 
   const handleCancelBatchDirectly = () => {
@@ -354,7 +369,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     localStorage.removeItem(maxDrynessKey);
 
     setPredictionData({ dryness: 0, minutesLeft: 0 });
-    
     onDataUpdate?.({ dryness: 0, minutesLeft: 0, hasDetection: hasDetectionRef.current });
     toast.success("Đã hủy và làm sạch tiến độ mẻ phơi!");
   };
@@ -367,17 +381,18 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     setConnectionStatusText('Đang kết nối LiveKit Cloud...');
     
     try {
-      // 🚀 1. LẤY TOKEN TỪ CLOUD SIGNALING SERVER
+      const targetIdentity = livekitIdentity || localSelectedCameraId;
+
+      if (!targetIdentity || targetIdentity.trim() === '') {
+        throw new Error("Chưa có cấu hình ID kết nối LiveKit");
+      }
+
       const signalUrl = (import.meta as any).env?.VITE_WEBRTC_SIGNAL_URL || 'https://camera-relay-v5.onrender.com';
       const roomName = "mylongai"; 
       
-      const response = await fetch(`${signalUrl}/api/cameras/${localSelectedCameraId}/token`, {
+      const response = await fetch(`${signalUrl}/api/cameras/${targetIdentity}/token`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Thêm Authorization nếu Backend API của bạn yêu cầu JWT user đăng nhập
-          // 'Authorization': `Bearer ${user?.token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           identity: `viewer_${Math.random().toString(36).substring(7)}`,
           room_name: roomName,
@@ -385,28 +400,21 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         })
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Server cấp quyền thất bại: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server cấp quyền thất bại: ${response.status}`);
 
       const { token, server_url } = await response.json();
       setConnectionStatusText('Đang thiết lập phòng...');
 
-      // 🚀 2. KHỞI TẠO LIVEKIT ROOM VỚI CÁC TÙY CHỌN TỐI ƯU BĂNG THÔNG
+      // 🚀 TẮT ADAPTIVE STREAM: Ép LiveKit trả về Video cực nét, không được làm mờ
       const room = new Room({
-        adaptiveStream: true,
+        adaptiveStream: false, 
         dynacast: true
       });
       roomRef.current = room;
 
-      // 🚀 3. LẮNG NGHE CÁC SỰ KIỆN CỦA ROOM
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === 'video') {
-          console.log("✅ Đã nhận Track Video từ LiveKit Cloud!");
-          
           if (videoRef.current) {
-            // LiveKit SDK sẽ tự động xử lý DOM và vượt rào autoplay cực tốt với hàm attach
             track.attach(videoRef.current);
             setIsUsingLiveStream(true);
             setIsPlayBlocked(false);
@@ -415,36 +423,28 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
-        console.warn("⚠️ Track video đã bị gỡ bỏ khỏi phòng.");
-        if (videoRef.current) {
-          track.detach(videoRef.current);
-        }
+        if (videoRef.current) track.detach(videoRef.current);
       });
 
       room.on(RoomEvent.Disconnected, () => {
-        console.error("❌ Ngắt kết nối LiveKit.");
         setRealtimeError('Đã mất kết nối tới phòng LiveKit.');
         stopAny();
       });
 
-      // 🚀 4. TIẾN HÀNH KẾT NỐI VÀO PHÒNG
       await room.connect(server_url, token);
-      console.log("✅ Kết nối LiveKit Cloud thành công!");
-
+      
       setCameraActive(true);
       loopRef.current = true;
       detectLoop();
       onYoloStateChange(true);
       
-      // Timeout cảnh báo nếu sau 12s chưa nhận được track (Camera ở xưởng chưa đẩy luồng)
       setTimeout(() => {
         if (roomRef.current && roomRef.current.state === 'connected' && !isUsingLiveStream) {
-            setRealtimeError("Đã vào phòng nhưng chưa nhận được luồng. Vui lòng kiểm tra Laptop/Main.py tại xưởng!");
+            setRealtimeError("Đã vào phòng nhưng chưa nhận được luồng từ xưởng!");
         }
       }, 12000);
 
     } catch (err: any) {
-      console.error("Lỗi LiveKit:", err);
       setRealtimeError(`Lỗi kết nối: ${err.message || 'Hệ thống AI bận'}`);
     } finally {
       setRealtimeLoading(false);
@@ -454,9 +454,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
   const handleCameraChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newDbId = e.target.value;
     setLocalSelectedCameraId(newDbId);
-    if (cameraActive && !videoDemoUrl) {
-      stopAny();
-    }
+    if (cameraActive && !videoDemoUrl) stopAny();
   };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -476,7 +474,6 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
     }
   };
 
-  // Vẫn giữ lại nút bấm thủ công để dự phòng các trình duyệt quá khắt khe
   const forcePlayVideo = () => {
     if (videoRef.current) {
       videoRef.current.muted = true;
@@ -485,16 +482,17 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
         playPromise.then(() => {
           setIsPlayBlocked(false);
           setIsUsingLiveStream(true);
-        }).catch(e => console.error("Vẫn không thể phát:", e));
+        }).catch(() => {});
       }
     } else {
-      toast.error("Luồng video chưa tải xong, vui lòng đợi 1 giây rồi thử lại!");
+      toast.error("Luồng video chưa tải xong!");
     }
   };
 
   useEffect(() => () => stopAny(), []);
 
-  const validDetections = realtimeDetections.filter(d => d.confidence >= 0.3);
+  // 🚀 Threshold đã được hạ xuống 0.25 ở trên, render ra giao diện
+  const validDetections = realtimeDetections.filter(d => d.confidence >= 0.25);
   const totalConfidence = validDetections.reduce((sum, d) => sum + d.confidence, 0);
   const avgConfidence = validDetections.length > 0 ? (totalConfidence / validDetections.length) * 100 : 0;
   const estimatedCompletion = new Date(Date.now() + predictionData.minutesLeft * 60000);
@@ -567,12 +565,22 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
               </div>
             )}
             
+            {/* 🚀 ĐÃ BỔ SUNG crossOrigin ĐỂ CHỐNG LỖI BẢO MẬT CANVAS */}
             <video
               ref={videoRef}
               autoPlay
               muted
               playsInline
+              crossOrigin="anonymous"
               className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 z-0 ${
+                cameraActive ? "opacity-100" : "opacity-0"
+              }`}
+            />
+
+            {/* 🚀 LỚP CANVAS TRONG SUỐT NẰM ĐÈ LÊN VIDEO ĐỂ VẼ KHUNG MÀU CYAN */}
+            <canvas 
+              ref={canvasBboxRef}
+              className={`absolute inset-0 w-full h-full object-contain pointer-events-none z-10 transition-opacity duration-300 ${
                 cameraActive ? "opacity-100" : "opacity-0"
               }`}
             />
@@ -594,7 +602,7 @@ export function RealtimeCameraYolo({ onYoloStateChange, isBackgroundActive, onDa
             {cameraActive && !isPlayBlocked && (
               <div className="absolute top-2 left-2 bg-[#0B1121]/80 backdrop-blur-md px-2 py-1 rounded text-xs font-mono text-cyan-400 border border-cyan-500/20 z-20">
                 <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse inline-block mr-1" />
-                {videoDemoUrl ? "VIDEO TEST" : "LIVEKIT WEBRTC"}
+                {videoDemoUrl ? "VIDEO TEST" : "LIVEKIT WEBRTC (HIGH-RES)"}
               </div>
             )}
             {isScanning && !isPlayBlocked && (
