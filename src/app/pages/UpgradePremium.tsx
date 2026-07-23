@@ -4,10 +4,9 @@ import { CheckCircle2, QrCode, AlertTriangle, Loader2, Zap, CreditCard, Copy, Sh
 import { toast } from 'sonner';
 
 import { paymentApi, authApi } from '../../services/endpoints'; 
-import { useAuth } from '../contexts/AuthContext'; // 🚀 Import useAuth để lấy hàm refetchUser
+import { useAuth } from '../contexts/AuthContext'; 
 
 export default function UpgradePremium() {
-  // 🚀 Lấy hàm refetchUser từ Context để cập nhật quyền toàn hệ thống
   const { refetchUser } = useAuth(); 
 
   const [order, setOrder] = useState<any>(null);
@@ -26,19 +25,14 @@ export default function UpgradePremium() {
     setError(null);
 
     try {
-      // 🚀 BƯỚC 1: Lấy Profile HIỆN TẠI trước khi tạo đơn để biết ngày hết hạn cũ
       const currentProfileRes: any = await authApi.getProfile();
       const currentProfile = currentProfileRes?.data || currentProfileRes;
-      
-      // Bắt chuẩn tên biến đồng nghiệp yêu cầu
       const initialExp = currentProfile?.premium_expired_at || null; 
 
-      // 🚀 BƯỚC 2: Tạo đơn hàng
       const res: any = await paymentApi.createOrder();
       const data = res?.data || res;
-      setOrder(data);
+      setOrder(data); // 🚀 Dữ liệu order lúc này sẽ chứa thêm order.month_number từ BE
       
-      // Truyền ngày hết hạn cũ vào hàm Polling để làm mốc so sánh
       startPolling(initialExp);
       
     } catch (err: any) {
@@ -62,13 +56,10 @@ export default function UpgradePremium() {
         const profile = res?.data || res;
         const newExp = profile?.premium_expired_at || null;
         
-        // 🚀 BƯỚC 3: CHECK ĐIỀU KIỆN ĐỒNG NGHIỆP YÊU CẦU
-        // Thành công = Role là Premium VÀ Ngày hết hạn phải KHÁC ngày hết hạn cũ
         if (profile.role === 'premium' && newExp !== initialExp) {
           stopPolling();
           setIsPaid(true);
           
-          // 🚀 BƯỚC 4: Ép toàn bộ App cập nhật lại quyền để mở khóa các tính năng ngay lập tức!
           if (refetchUser) {
             await refetchUser();
           }
@@ -119,7 +110,7 @@ export default function UpgradePremium() {
               </p>
             </div>
             <button 
-              onClick={() => window.location.href = '/dashboard'} // Chuyển thẳng về Dashboard thay vì reload tại chỗ
+              onClick={() => window.location.href = '/dashboard'} 
               className="mt-8 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition-colors shadow-lg shadow-emerald-500/25"
             >
               Về bảng điều khiển
@@ -164,6 +155,15 @@ export default function UpgradePremium() {
                   </h3>
                   
                   <div className="bg-[#151E2F] rounded-xl p-5 border border-slate-700/50 space-y-4 text-base">
+                    
+                    {/* 🚀 Bổ sung hiển thị thông tin Tháng thứ mấy từ Backend */}
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <span className="text-slate-400">Gói đăng ký:</span>
+                      <span className="font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded">
+                        Premium - Tháng thứ {order.month_number || 1}
+                      </span>
+                    </div>
+
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                       <span className="text-slate-400">Ngân hàng:</span>
                       <span className="font-bold text-slate-100">{order.bank_name}</span>
@@ -186,7 +186,7 @@ export default function UpgradePremium() {
 
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                       <span className="text-slate-400">Số tiền:</span>
-                      <span className="font-black text-emerald-400 text-2xl">{order.amount.toLocaleString('vi-VN')} đ</span>
+                      <span className="font-black text-emerald-400 text-2xl">{Number(order.amount).toLocaleString('vi-VN')} đ</span>
                     </div>
 
                     <div className="flex justify-between items-center pt-1">
@@ -238,20 +238,31 @@ export default function UpgradePremium() {
             </div>
           )}
 
-          <div className="flex flex-col items-center justify-center my-6">
-            <span className="text-slate-500 uppercase tracking-widest text-sm font-semibold mb-3">Gói Premium Ưu Đãi</span>
-            <div className="flex items-baseline gap-1">
-              <span className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
-                10.000
-              </span>
-              <span className="text-3xl font-bold text-slate-300">đ</span>
+          {/* 🚀 Thay đổi UI hiển thị Bảng giá thay vì Fix cứng 10.000đ */}
+          <div className="flex flex-col items-center justify-center my-6 space-y-4">
+            <span className="text-slate-400 uppercase tracking-widest text-sm font-semibold">Bảng Giá Premium</span>
+            
+            <div className="flex flex-col gap-3 w-full max-w-md">
+              <div className="flex justify-between items-center bg-[#151E2F] p-4 rounded-xl border border-slate-700 shadow-inner">
+                <span className="text-slate-300 font-medium">Tháng 1 & 2:</span>
+                <span className="font-extrabold text-xl text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+                  299.000đ <span className="text-sm font-normal text-slate-500">/tháng</span>
+                </span>
+              </div>
+              <div className="flex justify-between items-center bg-[#151E2F] p-4 rounded-xl border border-slate-700 shadow-inner">
+                <span className="text-slate-300 font-medium">Từ tháng 3 trở đi:</span>
+                <span className="font-extrabold text-xl text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+                  399.000đ <span className="text-sm font-normal text-slate-500">/tháng</span>
+                </span>
+              </div>
             </div>
-            <span className="text-emerald-400 font-medium mt-3 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">
-              Thời hạn sử dụng: 01 Tháng
+
+            <span className="text-emerald-400 font-medium text-xs md:text-sm mt-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 text-center">
+              Hệ thống sẽ tự động nhận diện và tính toán giá dựa trên lịch sử tài khoản của bạn
             </span>
           </div>
 
-          <div className="flex justify-center my-8">
+          <div className="flex justify-center my-6">
             <div className="space-y-4">
               <h3 className="font-semibold text-slate-200 text-lg mb-4 text-center">Đặc quyền tài khoản Premium:</h3>
               <ul className="space-y-4 text-base text-slate-300">
@@ -279,7 +290,7 @@ export default function UpgradePremium() {
             </div>
           </div>
 
-          <div className="mt-auto pt-6">
+          <div className="mt-auto pt-4">
             <button
               onClick={handleUpgrade}
               disabled={loading}
@@ -290,7 +301,7 @@ export default function UpgradePremium() {
               ) : (
                 <CreditCard className="w-6 h-6" />
               )}
-              {loading ? "Đang khởi tạo mã thanh toán..." : "Nâng Cấp Premium (1 Tháng) - 10.000đ"}
+              {loading ? "Đang khởi tạo mã thanh toán..." : "Tiến Hành Nâng Cấp Premium"}
             </button>
             <p className="text-center text-slate-500 text-sm mt-4">
               Giao dịch được mã hóa và bảo mật an toàn 100%
