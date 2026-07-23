@@ -1,11 +1,29 @@
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { TrendingUp, CloudRain, Target, BarChart3, Shield, CheckCircle2, ArrowRight, Sparkles, Zap, Eye, Brain, AlertTriangle, Clock } from 'lucide-react';
+import { Avatar, AvatarFallback } from '../components/ui/avatar'; // 🚀 Thêm import Avatar
+import { TrendingUp, CloudRain, Target, BarChart3, Shield, CheckCircle2, ArrowRight, Sparkles, Zap, Eye, Brain, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext'; 
 
 export default function Landing() {
+  const navigate = useNavigate(); // 🚀 Dùng useNavigate để điều hướng
+  const { isAuthenticated, user } = useAuth();
+
+  // 🚀 Hàm lấy chữ cái đầu giống DashboardLayout
+  const getUserInitials = (name: string) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const displayName =   user?.name || 'Người dùng';
+
   return (
     <div className="min-h-screen bg-[#0A0E27] text-slate-100">
       {/* Animated background grid */}
@@ -38,14 +56,34 @@ export default function Landing() {
               <p className="text-xs text-slate-400 font-medium">BatchGuard System</p>
             </div>
           </div>
-          <nav className="flex gap-8 items-center">
+          <nav className="flex gap-4 md:gap-8 items-center">
             <a href="#features" className="hidden md:block text-sm font-medium text-slate-300 hover:text-sky-400 transition-colors">Công nghệ</a>
             <a href="#technology" className="hidden md:block text-sm font-medium text-slate-300 hover:text-sky-400 transition-colors">Tính năng</a>
-            <Link to="/login">
-              <Button className="bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-semibold shadow-lg shadow-sky-500/30 border-0">
-                Đăng nhập
+            
+            {/* 🚀 LOGIC HIỂN THỊ AVATAR ĐỒNG BỘ VỚI DASHBOARD */}
+            {isAuthenticated ? (
+              <Button 
+                variant="ghost" 
+                onClick={() => navigate(user?.role === 'admin' ? '/admin' : '/dashboard/userprofile')}
+                className="flex items-center gap-3 hover:bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 cursor-pointer transition-all hover:border-sky-500/50 h-auto"
+              >
+                <Avatar className="w-8 h-8 border-2 border-sky-400">
+                  <AvatarFallback className="bg-gradient-to-br from-sky-400 to-cyan-400 text-navy-950 font-bold text-sm">
+                    {user ? getUserInitials(displayName) : 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-white hidden md:block">
+                  {displayName}
+                </span>
               </Button>
-            </Link>
+            ) : (
+              <Link to="/login">
+                <Button className="bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-semibold shadow-lg shadow-sky-500/30 border-0">
+                  Đăng nhập
+                </Button>
+              </Link>
+            )}
+
           </nav>
         </div>
       </header>
@@ -73,7 +111,7 @@ export default function Landing() {
               Hệ thống Camera AI tự động phát hiện, theo dõi và dự đoán tiến độ phơi bánh tráng Mỹ Lồng với độ chính xác cao
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link to="/dashboard">
+              <Link to={isAuthenticated ? (user?.role === 'admin' ? '/admin' : '/dashboard') : '/login'}>
                 <Button size="lg" className="bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 h-14 px-8 text-base font-bold shadow-xl shadow-sky-500/30">
                   Trải nghiệm Dashboard
                   <ArrowRight className="ml-2 w-5 h-5" />
@@ -352,7 +390,7 @@ export default function Landing() {
               Trải nghiệm hệ thống AI monitoring cao cấp ngay hôm nay
             </p>
             <div className="flex flex-col sm:flex-row gap-5 justify-center">
-              <Link to="/dashboard">
+              <Link to={isAuthenticated ? (user?.role === 'admin' ? '/admin' : '/dashboard') : '/login'}>
                 <Button size="lg" className="bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 h-16 px-10 text-lg font-bold shadow-2xl shadow-sky-500/30">
                   Khám phá Dashboard
                   <ArrowRight className="ml-2 w-5 h-5" />
