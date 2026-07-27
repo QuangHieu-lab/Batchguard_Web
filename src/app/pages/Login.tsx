@@ -6,8 +6,9 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Activity, Loader2, Sparkles } from 'lucide-react';
+import { Activity, Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { authApi } from '../../services/endpoints'; // Đảm bảo đường dẫn này đúng với project của bạn
 
 export default function Login() {
   const navigate = useNavigate();
@@ -19,6 +20,11 @@ export default function Login() {
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
+
+  // States cho tính năng Quên mật khẩu
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   // Navigate based on user role when authenticated
   useEffect(() => {
@@ -54,6 +60,25 @@ export default function Login() {
     }
   };
 
+  // Xử lý gửi email quên mật khẩu
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) return toast.error('Vui lòng nhập email');
+    
+    setIsForgotLoading(true);
+    try {
+      await authApi.forgotPassword({ email: forgotEmail });
+      toast.success('Nếu email tồn tại, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu.');
+      setIsForgotPassword(false); // Quay lại màn hình đăng nhập
+      setForgotEmail('');
+    } catch (error: any) {
+      const errDetail = error.response?.data?.detail || 'Có lỗi xảy ra, vui lòng thử lại.';
+      toast.error(errDetail);
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0A0E27] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Animated background */}
@@ -81,7 +106,7 @@ export default function Login() {
             </div>
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <div className="text-3xl font-bold text-white tracking-tight">MYLONGAI</div>
+                <div className="text-3xl font-bold text-white tracking-tight">LANGAI</div>
                 <div className="flex items-center gap-1 px-2 py-0.5 bg-sky-400/20 border border-sky-400/30 rounded-lg">
                   <Sparkles className="w-3 h-3 text-sky-400" />
                   <span className="text-xs font-bold text-sky-400">AI</span>
@@ -96,140 +121,184 @@ export default function Login() {
         </div>
 
         {/* Auth Card */}
-        <Card className="border-2 border-slate-700 shadow-2xl shadow-sky-500/10 bg-slate-800/80 backdrop-blur-xl rounded-3xl">
+        <Card className="border-2 border-slate-700 shadow-2xl shadow-sky-500/10 bg-slate-800/80 backdrop-blur-xl rounded-3xl overflow-hidden">
           <CardHeader className="text-center pb-4">
-            <CardTitle className="text-white text-2xl">Chào mừng trở lại</CardTitle>
+            <CardTitle className="text-white text-2xl">
+              {isForgotPassword ? 'Khôi phục mật khẩu' : 'Chào mừng trở lại'}
+            </CardTitle>
             <CardDescription className="text-slate-400">
-              Đăng nhập để truy cập hệ thống giám sát
+              {isForgotPassword 
+                ? 'Nhập email để nhận liên kết đặt lại mật khẩu' 
+                : 'Đăng nhập để truy cập hệ thống giám sát'}
             </CardDescription>
           </CardHeader>
+          
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-900 border border-slate-700 p-1 rounded-xl">
-                <TabsTrigger 
-                  value="login"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-cyan-500 data-[state=active]:text-navy-950 data-[state=active]:shadow-lg text-slate-400 rounded-lg"
-                >
-                  Đăng nhập
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="register"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-cyan-500 data-[state=active]:text-navy-950 data-[state=active]:shadow-lg text-slate-400 rounded-lg"
-                >
-                  Đăng ký
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Login Tab */}
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email" className="text-slate-300">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="email@example.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password" className="text-slate-300">Mật khẩu</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
-                    />
-                  </div>
+            {isForgotPassword ? (
+              /* ================= FORGOT PASSWORD FORM ================= */
+              <form onSubmit={handleForgotPassword} className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="space-y-2">
+                  <Label htmlFor="forgot-email" className="text-slate-300">Email của bạn</Label>
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                    disabled={isForgotLoading}
+                    className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                  />
+                </div>
+                
+                <div className="pt-2 space-y-3">
                   <Button 
                     type="submit" 
-                    className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-bold shadow-lg shadow-sky-500/30 rounded-xl h-11 mt-6"
-                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-bold shadow-lg shadow-sky-500/30 rounded-xl h-11"
+                    disabled={isForgotLoading}
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang xử lý...
-                      </>
-                    ) : (
-                      'Đăng nhập'
-                    )}
+                    {isForgotLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang gửi...</>
+                    ) : 'Gửi liên kết xác nhận'}
                   </Button>
-                </form>
-              </TabsContent>
-
-              {/* Register Tab */}
-              <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="register-name" className="text-slate-300">Họ và tên</Label>
-                    <Input
-                      id="register-name"
-                      type="text"
-                      placeholder="Nguyễn Văn A"
-                      value={registerName}
-                      onChange={(e) => setRegisterName(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email" className="text-slate-300">Email</Label>
-                    <Input
-                      id="register-email"
-                      type="email"
-                      placeholder="email@example.com"
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password" className="text-slate-300">Mật khẩu</Label>
-                    <Input
-                      id="register-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      required
-                      disabled={isLoading}
-                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
-                    />
-                  </div>
+                  
                   <Button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-bold shadow-lg shadow-sky-500/30 rounded-xl h-11 mt-6"
-                    disabled={isLoading}
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setIsForgotPassword(false)}
+                    disabled={isForgotLoading}
+                    className="w-full text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl h-11"
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang xử lý...
-                      </>
-                    ) : (
-                      'Tạo tài khoản'
-                    )}
+                    <ArrowLeft className="w-4 h-4 mr-2" /> Quay lại đăng nhập
                   </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+                </div>
+              </form>
+            ) : (
+              /* ================= LOGIN & REGISTER TABS ================= */
+              <Tabs defaultValue="login" className="w-full animate-in fade-in zoom-in-95 duration-200">
+                <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-900 border border-slate-700 p-1 rounded-xl">
+                  <TabsTrigger 
+                    value="login"
+                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-cyan-500 data-[state=active]:text-navy-950 data-[state=active]:shadow-lg text-slate-400 rounded-lg"
+                  >
+                    Đăng nhập
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="register"
+                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-cyan-500 data-[state=active]:text-navy-950 data-[state=active]:shadow-lg text-slate-400 rounded-lg"
+                  >
+                    Đăng ký
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Login Tab */}
+                <TabsContent value="login">
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email" className="text-slate-300">Email</Label>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="email@example.com"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="login-password" className="text-slate-300">Mật khẩu</Label>
+                        {/* Nút gọi Forgot Password */}
+                        <button 
+                          type="button" 
+                          onClick={() => setIsForgotPassword(true)}
+                          className="text-xs text-sky-400 hover:text-sky-300 hover:underline"
+                        >
+                          Quên mật khẩu?
+                        </button>
+                      </div>
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                      />
+                    </div>
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-bold shadow-lg shadow-sky-500/30 rounded-xl h-11 mt-6"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang xử lý...</>
+                      ) : 'Đăng nhập'}
+                    </Button>
+                  </form>
+                </TabsContent>
+
+                {/* Register Tab */}
+                <TabsContent value="register">
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-name" className="text-slate-300">Họ và tên</Label>
+                      <Input
+                        id="register-name"
+                        type="text"
+                        placeholder="Nguyễn Văn A"
+                        value={registerName}
+                        onChange={(e) => setRegisterName(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-email" className="text-slate-300">Email</Label>
+                      <Input
+                        id="register-email"
+                        type="email"
+                        placeholder="email@example.com"
+                        value={registerEmail}
+                        onChange={(e) => setRegisterEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-password" className="text-slate-300">Mật khẩu</Label>
+                      <Input
+                        id="register-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={registerPassword}
+                        onChange={(e) => setRegisterPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/30 rounded-xl h-11"
+                      />
+                    </div>
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-navy-950 font-bold shadow-lg shadow-sky-500/30 rounded-xl h-11 mt-6"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang xử lý...</>
+                      ) : 'Tạo tài khoản'}
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            )}
           </CardContent>
         </Card>
-
-        {/* Demo Accounts */}
-      
 
         {/* Footer Note */}
         <p className="text-center text-sm text-slate-500 mt-6">

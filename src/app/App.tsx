@@ -23,7 +23,7 @@ import AiPerformance from './pages/admin/AiPerformance';
 import DryingCycles from './pages/admin/DryingCycles';
 import UserProfile from './pages/UserProfile';
 import UpgradePremium from './pages/UpgradePremium'
-
+import ResetPassword from './pages/ResetPassword';
 const router = createBrowserRouter([
   {
     element: <RootLayout />,
@@ -35,6 +35,10 @@ const router = createBrowserRouter([
       {
         path: '/login',
         element: <Login />,
+      },
+      {
+        path: '/reset-password',
+        element: <ResetPassword />,
       },
       {
         path: '/dashboard',

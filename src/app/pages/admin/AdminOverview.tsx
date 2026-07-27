@@ -89,7 +89,7 @@ export default function AdminOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Tổng quan hệ thống</h1>
-          <p className="text-slate-400 mt-1">Trạng thái vận hành thực tế của MyLongAI</p>
+          <p className="text-slate-400 mt-1">Trạng thái vận hành thực tế của LangAI</p>
         </div>
         <div className="flex items-center gap-2 text-sm">
           {loading && <Activity className="w-4 h-4 text-slate-400 animate-spin" />}

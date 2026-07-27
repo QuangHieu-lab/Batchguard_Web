@@ -214,7 +214,7 @@ export default function Demo() {
             </Button>
             <div>
               <div className="flex items-center gap-1.5 md:gap-2">
-                <h1 className="text-lg md:text-xl font-bold text-gray-900">MYLONGAI Demo</h1>
+                <h1 className="text-lg md:text-xl font-bold text-gray-900">LANGAI Demo</h1>
                 <div className="flex items-center gap-1 px-1.5 md:px-2 py-0.5 bg-gradient-to-r from-purple-100 to-purple-200 rounded-md">
                   <Sparkles className="w-2.5 h-2.5 md:w-3 md:h-3 text-purple-700" />
                   <span className="text-[9px] md:text-[10px] font-semibold text-purple-700">DEMO</span>
