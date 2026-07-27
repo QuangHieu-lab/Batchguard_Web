@@ -47,7 +47,7 @@ export default function Landing() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-white tracking-tight">MYLONGAI</h1>
+                <h1 className="text-2xl font-bold text-white tracking-tight">LANGAI</h1>
                 <div className="flex items-center gap-1 px-2 py-0.5 bg-sky-400/20 border border-sky-400/30 rounded-lg">
                   <Sparkles className="w-3 h-3 text-sky-400" />
                   <span className="text-xs font-bold text-sky-400">AI</span>
@@ -414,7 +414,7 @@ export default function Landing() {
                   <BarChart3 className="w-6 h-6 text-navy-950" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg text-white">MYLONGAI</h3>
+                  <h3 className="font-bold text-lg text-white">LangAI</h3>
                   <p className="text-xs text-slate-500">BatchGuard System</p>
                 </div>
               </div>
@@ -448,7 +448,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="border-t border-slate-800 pt-8 text-center text-sm">
-            <p>© 2026 MYLONGAI BatchGuard System. All rights reserved.</p>
+            <p>© 2026 LANGAI BatchGuard System. All rights reserved.</p>
           </div>
         </div>
       </footer>

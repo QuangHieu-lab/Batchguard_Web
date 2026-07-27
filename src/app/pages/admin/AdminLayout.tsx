@@ -65,7 +65,7 @@ export default function AdminLayout() {
               <Activity className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold text-white">MYLONGAI</h1>
+              <h1 className="font-semibold text-white">LANGAI</h1>
               <p className="text-xs text-slate-400">Admin Dashboard</p>
             </div>
           </div>
