@@ -72,7 +72,7 @@ export default function Revenue() {
               id: s.order_code || Math.random().toString(),
               orderCode: s.order_code || 'N/A',
               user: s.full_name || 'Khách hàng ẩn danh', 
-              email: s.email || 'Chưa cập nhật',         
+              email: s.email || 'Chưa cập nhật',        
               amount: Number(s.amount) || 0,
               rawDate: rawDate, // Giữ lại ngày gốc để tính toán Frontend
               date: rawDate.toLocaleString('vi-VN'),
@@ -197,14 +197,14 @@ export default function Revenue() {
       return (
         <Badge className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-400 border border-purple-500/30 flex w-fit items-center gap-1.5">
           <Crown className="w-3 h-3" />
-          Gói 1 Năm
+          Gói 1 Tháng
         </Badge>
       );
     }
     return (
       <Badge className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 flex w-fit items-center gap-1.5">
         <Activity className="w-3 h-3" />
-        Gói 1 Tháng
+        Gói Tiêu Chuẩn
       </Badge>
     );
   };
@@ -313,7 +313,6 @@ export default function Revenue() {
                 <TableRow className="border-slate-800 hover:bg-transparent">
                   <TableHead className="text-slate-400 font-semibold w-[150px]">Mã Đơn</TableHead>
                   <TableHead className="text-slate-400 font-semibold">Khách hàng</TableHead>
-                  <TableHead className="text-slate-400 font-semibold">Email</TableHead>
                   <TableHead className="text-slate-400 font-semibold">Gói đăng ký</TableHead>
                   <TableHead className="text-slate-400 font-semibold">Trạng thái</TableHead>
                   <TableHead className="text-slate-400 font-semibold">Thời gian</TableHead>
@@ -331,7 +330,6 @@ export default function Revenue() {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium text-white">{tx.user}</TableCell>
-                      <TableCell className="text-slate-400 text-sm">{tx.email}</TableCell>
                       <TableCell>
                         {renderPackageBadge(tx.amount)}
                       </TableCell>
@@ -348,7 +346,7 @@ export default function Revenue() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-10 text-slate-500">
+                    <TableCell colSpan={6} className="text-center py-10 text-slate-500">
                       Chưa có dữ liệu giao dịch nào.
                     </TableCell>
                   </TableRow>
