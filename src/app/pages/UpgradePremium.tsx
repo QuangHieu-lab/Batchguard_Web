@@ -252,7 +252,7 @@ export default function UpgradePremium() {
               <div className="flex justify-between items-center bg-[#151E2F] p-4 rounded-xl border border-slate-700 shadow-inner">
                 <span className="text-slate-300 font-medium">Từ tháng 3 trở đi:</span>
                 <span className="font-extrabold text-xl text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
-                  399.000đ <span className="text-sm font-normal text-slate-500">/tháng</span>
+                  499.000đ <span className="text-sm font-normal text-slate-500">/tháng</span>
                 </span>
               </div>
             </div>
